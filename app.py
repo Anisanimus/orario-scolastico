@@ -4073,6 +4073,15 @@ with tabs[4]:
                             st.write(f"- ✅ **{s_name}**: **{s_sat} / {s_tot} classi** in blocco da 2h consecutive ({s_pct}% soddisfatto)")
                         else:
                             st.write(f"- 🟡 **{s_name}**: **{s_sat} / {s_tot} classi** in blocco da 2h consecutive ({s_pct}% soddisfatto)")
+                    
+                    trip_tot = getattr(res, "triple_hours_total", 0)
+                    trip_sat = getattr(res, "triple_hours_satisfied", 0)
+                    trip_pct = getattr(res, "triple_hours_pct", 100)
+                    if trip_tot > 0:
+                        if trip_sat == trip_tot:
+                            st.write(f"- ✅ **Italiano (Blocco da 3h - Tema)**: **{trip_sat} / {trip_tot} classi** in blocco da 3h consecutive ({trip_pct}% soddisfatto)")
+                        else:
+                            st.write(f"- 🟡 **Italiano (Blocco da 3h - Tema)**: **{trip_sat} / {trip_tot} classi** in blocco da 3h consecutive ({trip_pct}% soddisfatto)")
                 else:
                     st.caption("Nessuna materia flaggata per l'accorpamento a 2 ore.")
                     

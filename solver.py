@@ -53,6 +53,9 @@ class TimetableResult:
     double_hours_satisfied: int = 0
     double_hours_total: int = 0
     double_hours_by_subject: Dict[str, Dict[str, Any]] = field(default_factory=dict) # Dettaglio per materia flaggata
+    triple_hours_satisfied: int = 0
+    triple_hours_total: int = 0
+    triple_hours_pct: int = 100
     
     # Desiderata Avanzati
     soft_slots_satisfied: int = 0
@@ -1129,6 +1132,31 @@ class TimetableSolver:
             if is_flagged:
                 res.double_hours_total += tot_count
                 res.double_hours_satisfied += sat_count
+
+        # 3bis. Blocco da 3 Ore Consecutive (Tema di Italiano)
+        force_triple_ita = getattr(prob.config, "force_triple_hours_italian", False)
+        ita_assignments = [a for a in prob.assignments if a.subject_id in ["ita", "lettere", "italiano"] and (getattr(a, "force_triple_hours", False) or force_triple_ita)]
+        if ita_assignments:
+            trip_sat = 0
+            trip_tot = len(ita_assignments)
+            for a in ita_assignments:
+                has_trip = False
+                for d in range(num_days):
+                    for h in range(daily_hours[d] - 2):
+                        if active_solver.Value(self.x[a.id, d, h]) == 1 and active_solver.Value(self.x[a.id, d, h + 1]) == 1 and active_solver.Value(self.x[a.id, d, h + 2]) == 1:
+                            has_trip = True
+                            break
+                    if has_trip:
+                        break
+                if has_trip:
+                    trip_sat += 1
+            res.triple_hours_total = trip_tot
+            res.triple_hours_satisfied = trip_sat
+            res.triple_hours_pct = round(trip_sat / trip_tot * 100) if trip_tot > 0 else 100
+        else:
+            res.triple_hours_total = 0
+            res.triple_hours_satisfied = 0
+            res.triple_hours_pct = 100
 
         # 4. Desiderata Avanzati (Entrare tardi / Uscire presto / Slot puntuali)
         for t_id, teacher in prob.teachers.items():
