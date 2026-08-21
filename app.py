@@ -2019,14 +2019,14 @@ with tabs[0]:
     st.caption(f"Regola le ore di lezione di ciascun giorno con i tasti **➕** e **➖**. Totale attuale: **{tot_weekly_h} ore settimanali per classe** {'(Quadro orario standard 30h esatte ✅)' if tot_weekly_h == 30 else ''}.")
     
     # Pulsanti di preset rapido
-    q_col1, q_col2, _ = st.columns([1.6, 1.6, 3])
+    q_col1, q_col2, _ = st.columns([1.2, 1.2, 3])
     with q_col1:
-        if st.button("⚡ Imposta tutte a 5h", use_container_width=True, help="Imposta rapidamente 5 ore per tutti i giorni"):
+        if st.button("⚡ Tutte a 5h (Lun-Sab)", use_container_width=True, help="Imposta rapidamente 5 ore per tutti i giorni"):
             problem.config.daily_hours = [5] * num_days
             st.session_state.result = None
             st.rerun()
     with q_col2:
-        if st.button("⚡ Imposta tutte a 6h", use_container_width=True, help="Imposta rapidamente 6 ore per tutti i giorni"):
+        if st.button("⚡ Tutte a 6h (Lun-Ven)", use_container_width=True, help="Imposta rapidamente 6 ore per tutti i giorni"):
             problem.config.daily_hours = [6] * num_days
             st.session_state.result = None
             st.rerun()
@@ -2038,26 +2038,22 @@ with tabs[0]:
 
     for d_i in range(num_days):
         with cols_days[d_i]:
-            st.markdown(f"<div style='text-align: center; font-weight: 700; font-size: 0.95rem; color: #1e3a8a; margin-bottom: 6px;'>{DAYS_OF_WEEK[d_i]}</div>", unsafe_allow_html=True)
-            c_dec, c_val, c_inc = st.columns([1, 1.5, 1])
-            with c_dec:
-                if st.button("➖", key=f"dh_dec_{d_i}", help=f"Diminuisci ore di {DAYS_OF_WEEK[d_i]}", disabled=(new_daily_hours[d_i] <= 1), use_container_width=True):
-                    new_daily_hours[d_i] = max(1, new_daily_hours[d_i] - 1)
-                    problem.config.daily_hours = new_daily_hours
-                    st.session_state.result = None
-                    st.rerun()
-            with c_val:
-                st.markdown(f"""
-                <div style='background: #f8fafc; border: 2px solid #3b82f6; border-radius: 8px; text-align: center; font-size: 1.25rem; font-weight: 800; color: #1e3a8a; padding: 3px 0; margin-top: 1px;'>
-                    {new_daily_hours[d_i]}h
-                </div>
-                """, unsafe_allow_html=True)
-            with c_inc:
-                if st.button("➕", key=f"dh_inc_{d_i}", help=f"Aumenta ore di {DAYS_OF_WEEK[d_i]}", disabled=(new_daily_hours[d_i] >= 9), use_container_width=True):
-                    new_daily_hours[d_i] = min(9, new_daily_hours[d_i] + 1)
-                    problem.config.daily_hours = new_daily_hours
-                    st.session_state.result = None
-                    st.rerun()
+            with st.container(border=True):
+                st.markdown(f"<div style='text-align: center; font-weight: 700; font-size: 0.83rem; color: #1e3a8a; margin-bottom: 2px;'>{DAYS_OF_WEEK[d_i]}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='text-align: center; font-size: 1.05rem; font-weight: 800; color: #2563eb; margin: 1px 0 6px 0;'>{new_daily_hours[d_i]} ore</div>", unsafe_allow_html=True)
+                c_dec, c_inc = st.columns(2)
+                with c_dec:
+                    if st.button("➖", key=f"dh_dec_{d_i}", help=f"Diminuisci ore di {DAYS_OF_WEEK[d_i]}", disabled=(new_daily_hours[d_i] <= 1), use_container_width=True):
+                        new_daily_hours[d_i] = max(1, new_daily_hours[d_i] - 1)
+                        problem.config.daily_hours = new_daily_hours
+                        st.session_state.result = None
+                        st.rerun()
+                with c_inc:
+                    if st.button("➕", key=f"dh_inc_{d_i}", help=f"Aumenta ore di {DAYS_OF_WEEK[d_i]}", disabled=(new_daily_hours[d_i] >= 9), use_container_width=True):
+                        new_daily_hours[d_i] = min(9, new_daily_hours[d_i] + 1)
+                        problem.config.daily_hours = new_daily_hours
+                        st.session_state.result = None
+                        st.rerun()
                     
     problem.config.daily_hours = new_daily_hours
     # -------------------------------------------------------------
