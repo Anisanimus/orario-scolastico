@@ -1878,11 +1878,27 @@ with tabs[0]:
         )
     
     with col2:
+        def on_num_days_changed():
+            new_days = st.session_state["sel_num_days_radio"]
+            if new_days != problem.config.num_days:
+                problem.config.num_days = new_days
+                if new_days == 6:
+                    problem.config.daily_hours = [5, 5, 5, 5, 5, 5]
+                    for i in range(6):
+                        st.session_state[f"dh_{i}"] = 5
+                else:
+                    problem.config.daily_hours = [6, 6, 6, 6, 6]
+                    for i in range(5):
+                        st.session_state[f"dh_{i}"] = 6
+                st.session_state.result = None
+
         num_days = st.radio(
             "Articolazione Settimanale",
             [5, 6],
             index=0 if problem.config.num_days == 5 else 1,
-            format_func=lambda x: f"{x} Giorni (Settimana {'Corta Lun-Ven' if x==5 else 'Lunga Lun-Sab'})",
+            key="sel_num_days_radio",
+            on_change=on_num_days_changed,
+            format_func=lambda x: f"{x} Giorni (Settimana {'Corta Lun-Ven: 6h/dì' if x==5 else 'Lunga Lun-Sab: 5h/dì'})",
             horizontal=True
         )
         problem.config.num_days = num_days
@@ -1998,7 +2014,9 @@ with tabs[0]:
                 st.success("✅ **Flessibilità Attiva**: Il solutore posiziona i blocchi da 2 ore dove è più comodo per i docenti, ottimizzando buche e giorni liberi.")
 
     st.divider()
+    tot_weekly_h = sum(problem.config.daily_hours[:num_days])
     st.subheader("⏱️ Ore di Lezione Giornaliere")
+    st.caption(f"Configura quante ore di lezione si svolgono ogni giorno. Totale attuale: **{tot_weekly_h} ore settimanali per classe** {'(Quadro orario standard 30h esatte ✅)' if tot_weekly_h == 30 else ''}.")
     cols_days = st.columns(num_days)
     new_daily_hours = []
     for d_i in range(num_days):
