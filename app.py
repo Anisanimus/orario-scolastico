@@ -810,7 +810,7 @@ def render_optimization_criteria_panel(problem: TimetableProblem, key_prefix: st
             st.slider("Priorità Evitamento Slot Sconsigliati", 10, 200, step=10, key=f"{key_prefix}_w_soft", on_change=on_custom_crit_change)
 
 # Versione Software Progressiva
-APP_VERSION = "v1.0.0"
+APP_VERSION = "v1.0.1"
 
 # Configurazione Pagina Streamlit
 st.set_page_config(
@@ -918,6 +918,19 @@ if "result" not in st.session_state:
     st.session_state.result = None
 
 problem: TimetableProblem = st.session_state.problem
+
+# Garanzia di compatibilità per problem.config.daily_hours e num_days
+if not hasattr(problem.config, "num_days") or not problem.config.num_days:
+    problem.config.num_days = 5
+if not hasattr(problem.config, "daily_hours") or not problem.config.daily_hours:
+    problem.config.daily_hours = [6] * problem.config.num_days
+while len(problem.config.daily_hours) < problem.config.num_days:
+    problem.config.daily_hours.append(6)
+
+def get_safe_daily_hours(prob: TimetableProblem, d_i: int) -> int:
+    if hasattr(prob.config, "daily_hours") and prob.config.daily_hours and d_i < len(prob.config.daily_hours):
+        return prob.config.daily_hours[d_i]
+    return 6
 
 # Garanzia di compatibilità per sessioni già aperte nel browser
 for t in problem.teachers.values():
@@ -1287,7 +1300,7 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
         for d_i in range(problem.config.num_days):
             with unavail_cols[d_i]:
                 st.markdown(f"**{DAYS_OF_WEEK[d_i]}**")
-                for h_i in range(problem.config.daily_hours[d_i]):
+                for h_i in range(get_safe_daily_hours(problem, d_i)):
                     is_pre_checked = [d_i, h_i] in cur_unavail
                     is_unavail = st.checkbox(f"{h_i+1}ª Ora (No)", value=is_pre_checked, key=f"unavail_form_{d_i}_{h_i}{t_key_suffix}")
                     if is_unavail:
@@ -1301,7 +1314,7 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
         for d_i in range(problem.config.num_days):
             with req_cols[d_i]:
                 st.markdown(f"**{DAYS_OF_WEEK[d_i]}**")
-                for h_i in range(problem.config.daily_hours[d_i]):
+                for h_i in range(get_safe_daily_hours(problem, d_i)):
                     is_pre_checked = [d_i, h_i] in cur_required
                     is_req = st.checkbox(f"{h_i+1}ª Ora (Fissa 🔒)", value=is_pre_checked, key=f"req_form_{d_i}_{h_i}{t_key_suffix}")
                     if is_req:
@@ -1321,7 +1334,7 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
                 pin_day_label = st.selectbox("Giorno", DAYS_OF_WEEK[:problem.config.num_days], key=f"pin_day_sel{t_key_suffix}")
                 pin_day_idx = DAYS_OF_WEEK.index(pin_day_label)
             with p_c4:
-                pin_h_idx = st.selectbox("Ora", list(range(problem.config.daily_hours[pin_day_idx])), format_func=lambda x: f"{x+1}ª Ora", key=f"pin_h_sel{t_key_suffix}")
+                pin_h_idx = st.selectbox("Ora", list(range(get_safe_daily_hours(problem, pin_day_idx))), format_func=lambda x: f"{x+1}ª Ora", key=f"pin_h_sel{t_key_suffix}")
             with p_c5:
                 st.write("")
                 if st.button("📌 Blocca", key=f"btn_add_pin{t_key_suffix}", use_container_width=True, type="primary"):
@@ -1364,7 +1377,7 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
         for d_i in range(problem.config.num_days):
             with soft_cols[d_i]:
                 st.markdown(f"**{DAYS_OF_WEEK[d_i]}**")
-                for h_i in range(problem.config.daily_hours[d_i]):
+                for h_i in range(get_safe_daily_hours(problem, d_i)):
                     is_pre_checked = [d_i, h_i] in cur_soft
                     is_soft = st.checkbox(f"{h_i+1}ª Ora (Evita)", value=is_pre_checked, key=f"soft_form_{d_i}_{h_i}{t_key_suffix}")
                     if is_soft:
@@ -1981,6 +1994,7 @@ with tabs[0]:
             curr_h = problem.config.daily_hours[d_i] if d_i < len(problem.config.daily_hours) else 6
             h_val = st.number_input(f"{DAYS_OF_WEEK[d_i]}", min_value=3, max_value=9, value=curr_h, key=f"dh_{d_i}")
             new_daily_hours.append(h_val)
+    problem.config.daily_hours = new_daily_hours
     # -------------------------------------------------------------
     # SELEZIONE SECONDA LINGUA COMUNITARIA (2 ORE SETTIMANALI)
     # -------------------------------------------------------------
