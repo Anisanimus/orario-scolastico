@@ -1,0 +1,8 @@
+﻿__pycache__/
+*.py[cod]
+*.class
+*.log
+problem_dump.json
+.system_generated/
+.DS_Store
+Thumbs.db
