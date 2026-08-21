@@ -444,7 +444,7 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
                         class_id=c_k,
                         subject_id=s_code,
                         hours_per_week=2,
-                        force_double_hours=f_dbl or is_dada,
+                        force_double_hours=f_dbl,
                         max_daily_hours=2 if f_dbl else 1
                     ))
                 current_sub_classes = []
@@ -471,8 +471,8 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
                     class_id=c_k,
                     subject_id=s_code,
                     hours_per_week=2,
-                    force_double_hours=f_dbl or is_dada,
-                    max_daily_hours=2 if f_dbl else 1
+                    force_double_hours=f_dbl,
+                    max_daily_hours=2
                 ))
             t_idx += 1
 
@@ -553,6 +553,8 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
             "didone": Classroom(id="didone", name="DIDONE (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_7"] if "doc_let_7" in teachers else []),
             "marco_polo": Classroom(id="marco_polo", name="MARCO POLO (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_8"] if "doc_let_8" in teachers else []),
             "gagarin": Classroom(id="gagarin", name="GAGARIN (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_9"] if "doc_let_9" in teachers else []),
+            "pascoli": Classroom(id="pascoli", name="PASCOLI (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_10"] if "doc_let_10" in teachers else []),
+            "ungaretti": Classroom(id="ungaretti", name="UNGARETTI (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_11"] if "doc_let_11" in teachers else []),
 
             # Matematica e Scienze (A-28): 1 aula/lab a Priorità 1 per ciascun docente di cattedra
             "euclide": Classroom(id="euclide", name="EUCLIDE (Aula Matematica)", subject_ids=["mat", "sci"], capacity=1, priority=1, teacher_ids=["doc_mat_1"] if "doc_mat_1" in teachers else []),
@@ -560,10 +562,13 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
             "galileo": Classroom(id="galileo", name="GALILEO (Lab Scienze & Matematica)", subject_ids=["sci", "mat"], capacity=1, is_special_lab=True, priority=1, teacher_ids=["doc_mat_3"] if "doc_mat_3" in teachers else []),
             "eulero": Classroom(id="eulero", name="EULERO (Aula Matematica)", subject_ids=["mat", "sci"], capacity=1, priority=1, teacher_ids=["doc_mat_4"] if "doc_mat_4" in teachers else []),
             "newton": Classroom(id="newton", name="NEWTON (Aula Matematica)", subject_ids=["mat", "sci"], capacity=1, priority=1, teacher_ids=["doc_mat_5"] if "doc_mat_5" in teachers else []),
+            "fermi": Classroom(id="fermi", name="FERMI (Aula Matematica)", subject_ids=["mat", "sci"], capacity=1, priority=1, teacher_ids=["doc_mat_6"] if "doc_mat_6" in teachers else []),
+            "pascal": Classroom(id="pascal", name="PASCAL (Aula Matematica)", subject_ids=["mat", "sci"], capacity=1, priority=1, teacher_ids=["doc_mat_7"] if "doc_mat_7" in teachers else []),
 
             # Lingue Straniere: 1 aula a Priorità 1 per ciascun docente di lingua
             "queen": Classroom(id="queen", name="QUEEN (Aula Inglese)", subject_ids=["ing"], capacity=1, priority=1, teacher_ids=["doc_ing_1"] if "doc_ing_1" in teachers else []),
             "strawberry": Classroom(id="strawberry", name="STRAWBERRY (Aula Inglese)", subject_ids=["ing"], capacity=1, priority=1, teacher_ids=["doc_ing_2"] if "doc_ing_2" in teachers else []),
+            "cambridge": Classroom(id="cambridge", name="CAMBRIDGE (Aula Inglese)", subject_ids=["ing"], capacity=1, priority=1, teacher_ids=["doc_ing_3"] if "doc_ing_3" in teachers else []),
             "verne": Classroom(id="verne", name="VERNE (Aula Seconda Lingua)", subject_ids=["spa"], capacity=1, priority=1, teacher_ids=["doc_spa_1"] if "doc_spa_1" in teachers else []),
             "moliere": Classroom(id="moliere", name="MOLIERE (Aula Seconda Lingua)", subject_ids=["spa"], capacity=1, priority=1, teacher_ids=["doc_spa_2"] if "doc_spa_2" in teachers else []),
 
@@ -584,6 +589,7 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
 
             # Religione & Spazi Teatrali:
             "maddalena_malala": Classroom(id="maddalena_malala", name="MADDALENA-MALALA (Religione)", subject_ids=["rel"], capacity=1, priority=1, teacher_ids=["doc_rel_1"] if "doc_rel_1" in teachers else []),
+            "assisi": Classroom(id="assisi", name="SAN FRANCESCO (Religione)", subject_ids=["rel"], capacity=1, priority=1, teacher_ids=["doc_rel_2"] if "doc_rel_2" in teachers else []),
             "teatro": Classroom(id="teatro", name="LABORATORIO TEATRO (Spazio Principale)", subject_ids=["tea", "app_custom"], capacity=1, is_special_lab=True, priority=1),
             "auditorium": Classroom(id="auditorium", name="AUDITORIUM (Spazio Secondario / Riserva)", subject_ids=["tea", "app_custom"], capacity=1, is_special_lab=True, priority=2),
         }

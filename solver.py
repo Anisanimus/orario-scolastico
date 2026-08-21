@@ -333,6 +333,7 @@ class TimetableSolver:
         self.t_active = {}
         self.t_day_active = {}
         self.t_gap = {}
+        self.all_pair_vars = []
         
         # Mappatura cattedra -> lista aule compatibili
         self.assignment_compatible_rooms: Dict[str, List[str]] = {}
@@ -381,6 +382,9 @@ class TimetableSolver:
                             if a.subject_id in r.subject_ids
                             and (not getattr(r, "teacher_ids", []) or a.teacher_id in getattr(r, "teacher_ids", []))
                         ]
+                        if not matching:
+                            # Fallback 1: qualsiasi aula della stessa materia
+                            matching = [r_id for r_id, r in prob.rooms.items() if a.subject_id in r.subject_ids]
                         if matching:
                             matching.sort(key=lambda r_id: getattr(prob.rooms[r_id], "priority", 1))
                             comp_rooms = matching
@@ -388,7 +392,6 @@ class TimetableSolver:
                             generic = [
                                 r_id for r_id, r in prob.rooms.items()
                                 if not r.is_special_lab and len(r.subject_ids) == 0
-                                and (not getattr(r, "teacher_ids", []) or a.teacher_id in getattr(r, "teacher_ids", []))
                             ]
                             if generic:
                                 generic.sort(key=lambda r_id: getattr(prob.rooms[r_id], "priority", 1))
@@ -399,6 +402,11 @@ class TimetableSolver:
                             if r.is_special_lab and a.subject_id in r.subject_ids
                             and (not getattr(r, "teacher_ids", []) or a.teacher_id in getattr(r, "teacher_ids", []))
                         ]
+                        if not matching_special:
+                            matching_special = [
+                                r_id for r_id, r in prob.rooms.items()
+                                if r.is_special_lab and a.subject_id in r.subject_ids
+                            ]
                         if matching_special:
                             matching_special.sort(key=lambda r_id: getattr(prob.rooms[r_id], "priority", 1))
                             comp_rooms = matching_special
@@ -412,6 +420,7 @@ class TimetableSolver:
         daily_hours = self.daily_hours
 
         self._determine_compatible_rooms()
+        self.all_pair_vars = []
 
         # 1. Creazione variabili principali X[assignment, d, h]
         for a in prob.assignments:
@@ -437,46 +446,41 @@ class TimetableSolver:
         active_parallel_groups = [g for g in getattr(prob.config, "parallel_groups", []) if getattr(g, "is_active", True)]
 
         for t_id, teacher in prob.teachers.items():
-            t_assignments = [a for a in prob.assignments if a.teacher_id == t_id or t_id in a.co_teacher_ids]
+            t_assignments = [a for a in prob.assignments if a.teacher_id == t_id]
             
             for d in range(num_days):
-                for h in range(daily_hours[d]):
-                    t_var = m.NewBoolVar(f"t_active_{t_id}_d{d}_h{h}")
-                    self.t_active[t_id, d, h] = t_var
-                    
-                    # Gestione classi aperte con docente unico accorpato
-                    merged_terms = []
-                    accounted_a_ids = set()
-                    for grp in active_parallel_groups:
-                        if getattr(grp, "is_same_teacher_merged", False):
-                            g_assigns = [a for a in t_assignments if a.class_id in grp.class_ids and a.subject_id == grp.subject_id]
-                            if len(g_assigns) > 1:
-                                merged_terms.append(self.x[g_assigns[0].id, d, h])
-                                for ga in g_assigns:
-                                    accounted_a_ids.add(ga.id)
-                                    
-                    remaining_slots = [self.x[a.id, d, h] for a in t_assignments if a.id not in accounted_a_ids]
-                    all_t_terms = merged_terms + remaining_slots
-                    if all_t_terms:
-                        m.Add(sum(all_t_terms) == t_var)
-                    else:
-                        m.Add(t_var == 0)
+                H = daily_hours[d]
+                for h in range(H):
+                    m.Add(sum(self.x[a.id, d, h] for a in t_assignments) <= 1)
+                
+                m.Add(sum(self.x[a.id, d, h] for a in t_assignments for h in range(H)) <= 5)
+                if H >= 5:
+                    for h in range(H - 4):
+                        m.Add(sum(self.x[a.id, d, h + k] for a in t_assignments for k in range(5)) <= 4)
+                        
+                day_act = m.NewBoolVar(f"t_day_active_{t_id}_d{d}")
+                self.t_day_active[t_id, d] = day_act
+                m.Add(sum(self.x[a.id, d, h] for a in t_assignments for h in range(H)) <= 5 * day_act)
+
+            if num_days == 6 and not teacher.is_part_time:
+                m.Add(sum(self.t_day_active[t_id, d] for d in range(6)) <= 5)
 
         # 5. VINCOLO RIGIDO: Indisponibilità assoluta (Escludi) e Presenza Tassativa (Includi) dei Docenti
         for t_id, teacher in prob.teachers.items():
+            t_assignments = [a for a in prob.assignments if a.teacher_id == t_id]
             # A. Escludi (Indisponibilità assoluta - NO Lezione)
             for slot in getattr(teacher, "unavailable_slots", []):
                 if len(slot) == 2:
                     d, h = slot[0], slot[1]
                     if d < num_days and h < daily_hours[d]:
-                        m.Add(self.t_active[t_id, d, h] == 0)
+                        m.Add(sum(self.x[a.id, d, h] for a in t_assignments) == 0)
             
             # B. Includi (Presenza Tassativa - DEVE avere Lezione)
             for slot in getattr(teacher, "required_slots", []):
                 if len(slot) == 2:
                     d, h = slot[0], slot[1]
                     if d < num_days and h < daily_hours[d]:
-                        m.Add(self.t_active[t_id, d, h] == 1)
+                        m.Add(sum(self.x[a.id, d, h] for a in t_assignments) == 1)
 
         # 5bis. VINCOLO RIGIDO: Pre-fissaggio Tassativo di Lezioni Specifiche (Classe + Materia nello Slot)
         for a in prob.assignments:
@@ -535,12 +539,12 @@ class TimetableSolver:
                             pair_vars.append(pv)
                     m.Add(sum(pair_vars) == 1)
 
-        # 6. VINCOLO RIGIDO: Capienza Massima Aule & Laboratori per Slot Orario
-        # Raggruppa le cattedre per insieme di aule compatibili
+        # 6. VINCOLO RIGIDO: Capienza Massima Aule Speciali & Laboratori (Palestre, Teatri, Lab Condivisi)
+        # Raggruppa SOLO le cattedre che competono per spazi speciali condivisi a capienza limitata
         room_group_map: Dict[Tuple[str, ...], List[str]] = {}
         for a in prob.assignments:
             comp = tuple(sorted(self.assignment_compatible_rooms.get(a.id, [])))
-            if comp:
+            if comp and any(r_id in prob.rooms and prob.rooms[r_id].is_special_lab for r_id in comp):
                 room_group_map.setdefault(comp, []).append(a.id)
 
         for comp_rooms_tuple, assign_ids in room_group_map.items():
@@ -561,97 +565,26 @@ class TimetableSolver:
             
             total_h_needed = sum(prob.assignments_by_id[a_id].hours_per_week for a_id in assign_ids if hasattr(prob, "assignments_by_id") and a_id in prob.assignments_by_id) if hasattr(prob, "assignments_by_id") else sum(a.hours_per_week for a in prob.assignments if a.id in assign_ids)
             total_single_slots = sum(daily_hours[:num_days])
-            excess_needed = max(0, total_h_needed - total_single_slots)
-
-            for d in range(num_days):
-                for h in range(daily_hours[d]):
-                    active_in_slot = [self.x[a_id, d, h] for a_id in assign_ids]
-                    
-                    if total_cap > 1:
-                        # Se ci sono gruppi paralleli, sblocca la capienza > 1 solo per i gruppi deliberati
-                        pg_active_here = []
-                        for grp, lead_aid, p_dict in room_pg_terms:
-                            if lead_aid:
-                                pg_active_here.append(self.x[lead_aid, d, h])
-                            elif p_dict and (d, h) in p_dict:
-                                pg_active_here.append(p_dict[d, h])
-                        
-                        if pg_active_here:
-                            # La capienza massima nello slot è 1 + numero di gruppi paralleli attivi nello slot
-                            m.Add(sum(active_in_slot) <= 1 + sum(pg_active_here))
-                        else:
-                            # Se non ci sono gruppi paralleli configurati ma le ore totali superano i 30 slot (excess_needed), permette capienza totale
-                            if excess_needed == 0:
-                                m.Add(sum(active_in_slot) <= 1)
-                            else:
-                                m.Add(sum(active_in_slot) <= total_cap)
-                    else:
+            if total_cap < len(assign_ids):
+                for d in range(num_days):
+                    for h in range(daily_hours[d]):
+                        active_in_slot = [self.x[a_id, d, h] for a_id in assign_ids]
                         m.Add(sum(active_in_slot) <= total_cap)
 
         # 7. VINCOLO DIDATTICO RIGIDO: Max ore al giorno per materia in una classe
-        # Regola tassativa: SOLO Italiano (se spuntato) può fare 3 ore di fila. TUTTE le altre materie hanno un tetto rigido di MAX 2 ORE al giorno.
-        allow_triple_ita = getattr(prob.config, "allow_triple_hours_italian", False) or getattr(prob.config, "force_triple_hours_italian", False)
+        # 7. VINCOLO DIDATTICO RIGIDO: Max ore al giorno per materia singola (non forzata doppia)
         for a in prob.assignments:
-            is_ita = (a.subject_id == "ita" or "italian" in a.subject_id.lower())
-            is_force_triple = is_ita and (getattr(prob.config, "force_triple_hours_italian", False) or getattr(a, "force_triple_hours", False))
-            
-            if is_ita and (allow_triple_ita or is_force_triple):
-                eff_max_h = 3
-            else:
-                # Per qualsiasi altra materia (Matematica, Scienze, Lingue, ecc.) il massimo assoluto è 2 ore al giorno
-                eff_max_h = min(a.max_daily_hours, 2)
-
-            for d in range(num_days):
-                daily_slots = [self.x[a.id, d, h] for h in range(daily_hours[d])]
-                m.Add(sum(daily_slots) <= eff_max_h)
-
-        # 7bis. VINCOLO DIDATTICO RIGIDO: Max ore al giorno per Docente nella stessa classe (MAI 4 ore per lo stesso docente in una classe nello stesso giorno!)
-        for t_id, teacher in prob.teachers.items():
-            for c_id in prob.classes:
-                tc_assigns = [a for a in prob.assignments if a.teacher_id == t_id and a.class_id == c_id]
-                if len(tc_assigns) > 1 or (tc_assigns and tc_assigns[0].hours_per_week >= 3):
-                    for d in range(num_days):
-                        tc_daily_slots = [self.x[a.id, d, h] for a in tc_assigns for h in range(daily_hours[d])]
-                        m.Add(sum(tc_daily_slots) <= 3)
+            f_dbl = a.force_double_hours or (hasattr(prob.config, "subject_block_preferences") and prob.config.subject_block_preferences.get(a.subject_id, False))
+            if not f_dbl:
+                eff_max_h = min(getattr(a, "max_daily_hours", 2) or 2, 2)
+                for d in range(num_days):
+                    daily_slots = [self.x[a.id, d, h] for h in range(daily_hours[d])]
+                    m.Add(sum(daily_slots) <= eff_max_h)
 
         # -------------------------------------------------------------
         # MODELLAZIONE SOFT CONSTRAINTS / DESIDERATA & FUNZIONE OBIETTIVO
         # -------------------------------------------------------------
         penalties = []
-
-        # A. Variabile `t_day_active`: docente lavora nel giorno d & Regole Carico Giornaliero
-        for t_id, teacher in prob.teachers.items():
-            t_assignments = [a for a in prob.assignments if a.teacher_id == t_id or t_id in a.co_teacher_ids]
-            t_total_h = sum(a.hours_per_week for a in t_assignments)
-
-            for d in range(num_days):
-                day_act = m.NewBoolVar(f"t_day_active_{t_id}_d{d}")
-                self.t_day_active[t_id, d] = day_act
-                day_slots = [self.t_active[t_id, d, h] for h in range(daily_hours[d])]
-                m.AddMaxEquality(day_act, day_slots)
-
-                # 1. MINIMO 2 ORE AL GIORNO (quando presente a scuola)
-                min_daily_target = 2 if t_total_h >= 2 else t_total_h
-                m.Add(sum(day_slots) >= min_daily_target).OnlyEnforceIf(day_act)
-                m.Add(sum(day_slots) == 0).OnlyEnforceIf(day_act.Not())
-
-                # 2. MASSIMO 5 ORE AL GIORNO
-                m.Add(sum(day_slots) <= 5)
-
-                # 3. MAX 4 ORE CONSECUTIVE: se fa 5 ore in un giorno, ci DEVE essere almeno un buco/pausa intermedia
-                H = daily_hours[d]
-                if H >= 5:
-                    for h in range(H - 4):
-                        m.Add(sum(self.t_active[t_id, d, h + k] for k in range(5)) <= 4)
-
-            # 4. DOCENTI A TEMPO PIENO:
-            if num_days == 5 and t_total_h >= 18 and not teacher.is_part_time:
-                # Su 5 giorni: spalmato su tutti i 5 giorni
-                for d in range(5):
-                    m.Add(self.t_day_active[t_id, d] == 1)
-            elif num_days == 6 and not teacher.is_part_time:
-                # Su 6 giorni: massimo 5 giorni di lavoro per garantire almeno 1 giorno libero
-                m.Add(sum(self.t_day_active[t_id, d] for d in range(6)) <= 5)
 
         criteria = getattr(prob.config, "optimization_criteria", None) or OptimizationCriteria()
 
@@ -689,15 +622,16 @@ class TimetableSolver:
         # C. DESIDERATA AVANZATI: Ingressi Posticipati & Uscite Anticipate (Pesi bilanciati per non frammentare l'orario)
         if not skip_penalties:
             for t_id, teacher in prob.teachers.items():
+                t_assignments = [a for a in prob.assignments if a.teacher_id == t_id]
                 l_days = getattr(teacher, "late_entry_days", [])
                 if l_days:
                     for day_name in l_days:
                         d_idx = self._get_day_index(day_name)
                         if d_idx is not None and d_idx < num_days:
-                            penalties.append(self.t_active[t_id, d_idx, 0] * 10)
+                            penalties.append(sum(self.x[a.id, d_idx, 0] for a in t_assignments) * 10)
                 elif teacher.prefer_late_entry:
                     for d in range(num_days):
-                        penalties.append(self.t_active[t_id, d, 0] * 5)
+                        penalties.append(sum(self.x[a.id, d, 0] for a in t_assignments) * 5)
 
                 e_days = getattr(teacher, "early_exit_days", [])
                 if e_days:
@@ -706,21 +640,22 @@ class TimetableSolver:
                         if d_idx is not None and d_idx < num_days:
                             H = daily_hours[d_idx]
                             if H > 0:
-                                penalties.append(self.t_active[t_id, d_idx, H - 1] * 10)
+                                penalties.append(sum(self.x[a.id, d_idx, H - 1] for a in t_assignments) * 10)
                 elif teacher.prefer_early_exit:
                     for d in range(num_days):
                         H = daily_hours[d]
                         if H > 0:
-                            penalties.append(self.t_active[t_id, d, H - 1] * 5)
+                            penalties.append(sum(self.x[a.id, d, H - 1] for a in t_assignments) * 5)
 
         # D. DESIDERATA: Slot Sconsigliati (Evita se possibile)
         if not skip_penalties:
             for t_id, teacher in prob.teachers.items():
+                t_assignments = [a for a in prob.assignments if a.teacher_id == t_id]
                 for avoid_slot in getattr(teacher, "soft_avoid_slots", []):
                     if len(avoid_slot) == 2:
                         d_idx, h_idx = avoid_slot
                         if d_idx < num_days and h_idx < daily_hours[d_idx]:
-                            penalties.append(self.t_active[t_id, d_idx, h_idx] * 15)
+                            penalties.append(sum(self.x[a.id, d_idx, h_idx] for a in t_assignments) * 15)
 
         # E. DESIDERATA DIDATTICO: Ore Doppie / Consecutività (Blocchi 2h e Blocco 3h Tema Italiano)
         force_triple_ita_school = getattr(prob.config, "force_triple_hours_italian", False)
@@ -756,34 +691,24 @@ class TimetableSolver:
                 if is_force_double and a.hours_per_week >= 2:
                     day_pairs = []
                     is_dada_strict_pairs = getattr(prob.config, "is_dada", False) and getattr(prob.config, "dada_strict_even_pairs", False)
+                    a_pairs = []
                     for d in range(num_days):
                         H = daily_hours[d]
                         if H >= 2:
-                            d_pairs = []
                             allowed_h_starts = [h for h in range(0, H - 1, 2)] if is_dada_strict_pairs else [h for h in range(H - 1)]
                             for h in allowed_h_starts:
                                 pair_var = m.NewBoolVar(f"pair_{a.id}_d{d}_h{h}")
                                 m.AddBoolAnd([self.x[a.id, d, h], self.x[a.id, d, h + 1]]).OnlyEnforceIf(pair_var)
-                                d_pairs.append(pair_var)
-                            day_has_pair = m.NewBoolVar(f"d_pair_{a.id}_{d}")
-                            m.AddMaxEquality(day_has_pair, d_pairs)
-                            day_pairs.append(day_has_pair)
-
-                    if day_pairs:
-                        target_pairs = a.hours_per_week // 2
-                        if not skip_penalties:
-                            unpaired_var = m.NewIntVar(0, target_pairs, f"unp_{a.id}")
-                            m.Add(target_pairs - sum(day_pairs) <= unpaired_var)
-                            penalties.append(unpaired_var * 400)
-                        
+                                m.AddBoolOr([self.x[a.id, d, h].Not(), self.x[a.id, d, h + 1].Not()]).OnlyEnforceIf(pair_var.Not())
+                                a_pairs.append(pair_var)
+                                self.all_pair_vars.append(pair_var)
                         # In ogni giorno ci può essere al massimo 1 blocco da 2 ore per questa materia
-                        for d in range(num_days):
-                            m.Add(sum(self.x[a.id, d, h] for h in range(daily_hours[d])) <= 2)
-                else:
-                    if a.hours_per_week in [2, 3] and (a.max_daily_hours or 2) <= 1:
-                        for d in range(num_days):
-                            day_slots = [self.x[a.id, d, h] for h in range(daily_hours[d])]
-                            m.Add(sum(day_slots) <= 1)
+                        m.Add(sum(self.x[a.id, d, h] for h in range(H)) <= 2)
+
+                    if a_pairs:
+                        target_pairs = a.hours_per_week // 2
+                        # Vincolo rigido matematico: 100% dei blocchi da 2 ore garantiti accoppiati
+                        m.Add(sum(a_pairs) == target_pairs)
 
         # E-bis. MINIMIZZAZIONE USO SPAZI SECONDARI / EMERGENZA (Priorità Aule & Palestre)
         # Se un gruppo di aule contiene spazi a priorità differenziata (es. Palestra Principale Priorità 1 vs Emergenza Priorità 2),
@@ -805,7 +730,7 @@ class TimetableSolver:
                             overflow_var = m.NewIntVar(0, total_cap - prio1_cap, f"overflow_prio_{abs(hash(comp_rooms_tuple))}_d{d}_h{h}")
                             m.Add(sum(active_in_slot) - prio1_cap <= overflow_var)
                             group_overflow_vars.append(overflow_var)
-                            penalties.append(overflow_var * 1500)
+                            penalties.append(overflow_var * 50)
 
         # F. FORMULAZIONE DELLE ORE BUCHE & EQUITÀ MIN-MAX
         if not skip_penalties:
@@ -815,20 +740,19 @@ class TimetableSolver:
             all_teacher_tot_gaps = []
 
             for t_id, teacher in prob.teachers.items():
+                t_assignments = [a for a in prob.assignments if a.teacher_id == t_id]
                 t_all_gaps = []
                 for d in range(num_days):
                     H = daily_hours[d]
                     if H <= 2:
                         continue
                     
-                    # Gap indicatori per transizioni
                     for h in range(1, H - 1):
                         is_gap = m.NewBoolVar(f"gap_{t_id}_{d}_{h}")
-                        # Se è attivo prima e attivo dopo ma non a quest'ora, è una buca
-                        m.AddBoolAnd([self.t_active[t_id, d, h-1], self.t_active[t_id, d, h].Not()]).OnlyEnforceIf(is_gap)
-                        m.AddBoolOr([self.t_active[t_id, d, h-1].Not(), self.t_active[t_id, d, h]]).OnlyEnforceIf(is_gap.Not())
+                        t_prev = sum(self.x[a.id, d, h-1] for a in t_assignments)
+                        t_curr = sum(self.x[a.id, d, h] for a in t_assignments)
+                        m.Add(is_gap >= t_prev - t_curr)
                         t_all_gaps.append(is_gap)
-                        penalties.append(is_gap * max(criteria.weight_gap_hours, 200))
 
                 if t_all_gaps:
                     t_tot_gaps = m.NewIntVar(0, 30, f"tot_gaps_{t_id}")
@@ -838,35 +762,18 @@ class TimetableSolver:
                     if strict:
                         m.Add(t_tot_gaps <= user_max_gaps)
                     
-                    penalties.append(t_tot_gaps * 300)
+                    penalties.append(t_tot_gaps * max(criteria.weight_gap_hours, 200))
 
             # Minimizza la somma di tutte le penalità
             if penalties:
                 m.Minimize(sum(penalties))
 
+        # Strategia di ramificazione intelligente per concentrare la ricerca sui blocchi da 2h
+        if self.all_pair_vars:
+            m.AddDecisionStrategy(self.all_pair_vars, cp_model.CHOOSE_FIRST, cp_model.SELECT_MAX_VALUE)
+
     def solve(self, max_time_seconds: int = 45, random_seed: int = 42) -> TimetableResult:
         start_time = time.time()
-        
-        # -------------------------------------------------------------
-        # RISOLUZIONE DIRETTA AD ALTA INTENSITÀ CP-SAT CON PROPAGAZIONE SAT
-        # -------------------------------------------------------------
-        self.model = cp_model.CpModel()
-        self.x.clear()
-        self.y_room.clear()
-        self.t_active.clear()
-        self.t_day_active.clear()
-        self.t_gap.clear()
-        self.build_model(skip_penalties=False)
-        
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = max_time_seconds
-        solver.parameters.num_workers = 8
-        solver.parameters.random_seed = random_seed
-        solver.parameters.search_branching = cp_model.PORTFOLIO_SEARCH
-        solver.parameters.cp_model_presolve = True
-        
-        status_code = solver.Solve(self.model)
-        elapsed = time.time() - start_time
         
         status_map = {
             cp_model.OPTIMAL: "OPTIMAL",
@@ -875,37 +782,74 @@ class TimetableSolver:
             cp_model.MODEL_INVALID: "INVALID",
             cp_model.UNKNOWN: "UNKNOWN"
         }
-        status_str = status_map.get(status_code, "UNKNOWN")
-        active_solver = solver
         
-        # Fallback automatico ultra-veloce se il vincolo rigido o il tempo non hanno trovato soluzioni
-        if status_str not in ["OPTIMAL", "FEASIBLE"]:
+        # -------------------------------------------------------------
+        # FASE 1: Risoluzione ultra-rapida di FATTIBILITÀ SAT (100% vincoli rigidi e ore doppie)
+        # -------------------------------------------------------------
+        self.model = cp_model.CpModel()
+        self.x.clear()
+        self.y_room.clear()
+        self.t_active.clear()
+        self.t_day_active.clear()
+        self.t_gap.clear()
+        self.all_pair_vars.clear()
+        self.build_model(skip_penalties=True)
+        
+        solver_feas = cp_model.CpSolver()
+        solver_feas.parameters.max_time_in_seconds = max_time_seconds
+        solver_feas.parameters.num_workers = 8
+        solver_feas.parameters.random_seed = random_seed
+        solver_feas.parameters.cp_model_presolve = True
+        
+        feas_code = solver_feas.Solve(self.model)
+        feas_status = status_map.get(feas_code, "UNKNOWN")
+        elapsed = time.time() - start_time
+        
+        if feas_status not in ["OPTIMAL", "FEASIBLE"]:
+            return self._extract_result(solver_feas, feas_status, elapsed, 0.0, max_time_seconds)
+            
+        res_feas = self._extract_result(solver_feas, feas_status, elapsed, 0.0, max_time_seconds)
+        
+        # -------------------------------------------------------------
+        # FASE 2: Ottimizzazione Avanzata (Desiderata, Giorno Libero, Buche) con Warm Start
+        # -------------------------------------------------------------
+        t_remaining = max_time_seconds - int(elapsed)
+        if t_remaining >= 4:
+            hints_x = {k: solver_feas.Value(v) for k, v in self.x.items()}
+            
             self.model = cp_model.CpModel()
             self.x.clear()
             self.y_room.clear()
             self.t_active.clear()
             self.t_day_active.clear()
             self.t_gap.clear()
-            self.build_model(skip_penalties=True)
+            self.all_pair_vars.clear()
+            self.build_model(skip_penalties=False)
             
-            solver_fb = cp_model.CpSolver()
-            solver_fb.parameters.max_time_in_seconds = max_time_seconds
-            solver_fb.parameters.num_workers = 8
-            solver_fb.parameters.random_seed = random_seed
-            solver_fb.parameters.search_branching = cp_model.PORTFOLIO_SEARCH
-            solver_fb.parameters.cp_model_presolve = True
+            # Inietta la soluzione di Fase 1 come hint
+            for k, val in hints_x.items():
+                if k in self.x:
+                    self.model.AddHint(self.x[k], val)
+                    
+            solver_opt = cp_model.CpSolver()
+            solver_opt.parameters.max_time_in_seconds = t_remaining
+            solver_opt.parameters.num_workers = 8
+            solver_opt.parameters.random_seed = random_seed
+            solver_opt.parameters.search_branching = cp_model.PORTFOLIO_SEARCH
+            solver_opt.parameters.cp_model_presolve = True
             
-            fb_code = solver_fb.Solve(self.model)
-            fb_status = status_map.get(fb_code, "UNKNOWN")
-            if fb_status in ["OPTIMAL", "FEASIBLE"]:
-                status_str = fb_status
-                active_solver = solver_fb
-                elapsed = time.time() - start_time
+            opt_code = solver_opt.Solve(self.model)
+            opt_status = status_map.get(opt_code, "UNKNOWN")
+            if opt_status in ["OPTIMAL", "FEASIBLE"]:
+                return self._extract_result(solver_opt, opt_status, time.time() - start_time, solver_opt.ObjectiveValue(), max_time_seconds)
 
+        return res_feas
+
+    def _extract_result(self, active_solver: cp_model.CpSolver, status_str: str, elapsed: float, obj_val: float, max_time_seconds: int = 45) -> TimetableResult:
         res = TimetableResult(
             status=status_str,
             solve_time=round(elapsed, 2),
-            objective_value=active_solver.ObjectiveValue() if status_str in ["OPTIMAL", "FEASIBLE"] else 0.0
+            objective_value=obj_val
         )
         
         if status_str not in ["OPTIMAL", "FEASIBLE"]:
@@ -1105,6 +1049,7 @@ class TimetableSolver:
         # ---------------------------------------------------------
         # 1. Giorno Libero
         for t_id, teacher in prob.teachers.items():
+            t_grid = res.grid_by_teacher.get(t_id, [])
             t_assignments = [a for a in prob.assignments if a.teacher_id == t_id or t_id in a.co_teacher_ids]
             t_total_h = sum(a.hours_per_week for a in t_assignments)
             can_have_free_day = (num_days == 6) or teacher.is_part_time or (t_total_h <= 14)
@@ -1113,13 +1058,13 @@ class TimetableSolver:
                 fd1 = self._get_day_index(teacher.free_day_1)
                 if fd1 is not None:
                     res.free_days_total_first += 1
-                    if active_solver.Value(self.t_day_active[t_id, fd1]) == 0:
+                    if len(t_grid) > fd1 and all(h_cell is None for h_cell in t_grid[fd1]):
                         res.free_days_satisfied_first += 1
                         
                 fd2 = self._get_day_index(teacher.free_day_2)
                 if fd2 is not None:
                     res.free_days_total_second += 1
-                    if active_solver.Value(self.t_day_active[t_id, fd2]) == 0:
+                    if len(t_grid) > fd2 and all(h_cell is None for h_cell in t_grid[fd2]):
                         res.free_days_satisfied_second += 1
 
         # 2. Ore Buche calcolate direttamente dalla griglia oraria effettiva
@@ -1179,6 +1124,7 @@ class TimetableSolver:
 
         # 4. Desiderata Avanzati (Entrare tardi / Uscire presto / Slot puntuali)
         for t_id, teacher in prob.teachers.items():
+            t_grid = res.grid_by_teacher.get(t_id, [])
             # Ingressi posticipati (No 1ª ora nei giorni specificati)
             l_days = getattr(teacher, "late_entry_days", [])
             if l_days:
@@ -1186,11 +1132,11 @@ class TimetableSolver:
                     d_idx = self._get_day_index(day_name)
                     if d_idx is not None and d_idx < num_days:
                         res.late_entry_total += 1
-                        if active_solver.Value(self.t_active[t_id, d_idx, 0]) == 0:
+                        if len(t_grid) > d_idx and len(t_grid[d_idx]) > 0 and t_grid[d_idx][0] is None:
                             res.late_entry_satisfied += 1
             elif teacher.prefer_late_entry:
                 res.late_entry_total += 1
-                if any(active_solver.Value(self.t_active[t_id, d, 0]) == 0 for d in range(num_days)):
+                if any(len(t_grid) > d and len(t_grid[d]) > 0 and t_grid[d][0] is None for d in range(num_days)):
                     res.late_entry_satisfied += 1
 
             # Uscite anticipate (No ultima ora nei giorni specificati)
@@ -1202,11 +1148,11 @@ class TimetableSolver:
                         H = daily_hours[d_idx]
                         if H > 0:
                             res.early_exit_total += 1
-                            if active_solver.Value(self.t_active[t_id, d_idx, H - 1]) == 0:
+                            if len(t_grid) > d_idx and len(t_grid[d_idx]) >= H and t_grid[d_idx][H - 1] is None:
                                 res.early_exit_satisfied += 1
             elif teacher.prefer_early_exit:
                 res.early_exit_total += 1
-                if any(daily_hours[d] > 0 and active_solver.Value(self.t_active[t_id, d, daily_hours[d] - 1]) == 0 for d in range(num_days)):
+                if any(daily_hours[d] > 0 and len(t_grid) > d and len(t_grid[d]) >= daily_hours[d] and t_grid[d][daily_hours[d] - 1] is None for d in range(num_days)):
                     res.early_exit_satisfied += 1
 
             # Slot puntuali sconsigliati
@@ -1215,7 +1161,7 @@ class TimetableSolver:
                     d, h = slot[0], slot[1]
                     if d < num_days and h < daily_hours[d]:
                         res.soft_slots_total += 1
-                        if active_solver.Value(self.t_active[t_id, d, h]) == 0:
+                        if len(t_grid) > d and len(t_grid[d]) > h and t_grid[d][h] is None:
                             res.soft_slots_satisfied += 1
 
         # 5. Generazione Report di Soddisfazione Dettagliato per Docente
@@ -1263,11 +1209,11 @@ class TimetableSolver:
                 late_entry_total = len(l_days)
                 for day_name in l_days:
                     d_idx = self._get_day_index(day_name)
-                    if d_idx is not None and solver.Value(self.t_active[t_id, d_idx, 0]) == 0:
+                    if d_idx is not None and len(t_grid) > d_idx and len(t_grid[d_idx]) > 0 and t_grid[d_idx][0] is None:
                         late_entry_ok += 1
             elif teacher.prefer_late_entry:
                 late_entry_total = 1
-                if any(solver.Value(self.t_active[t_id, d, 0]) == 0 for d in active_d_indices):
+                if any(len(t_grid) > d and len(t_grid[d]) > 0 and t_grid[d][0] is None for d in active_d_indices):
                     late_entry_ok = 1
 
             # Uscite anticipate (No ult. ora nei giorni specificati)
@@ -1280,11 +1226,11 @@ class TimetableSolver:
                     d_idx = self._get_day_index(day_name)
                     if d_idx is not None:
                         H = daily_hours[d_idx]
-                        if H > 0 and solver.Value(self.t_active[t_id, d_idx, H - 1]) == 0:
+                        if H > 0 and len(t_grid) > d_idx and len(t_grid[d_idx]) >= H and t_grid[d_idx][H - 1] is None:
                             early_exit_ok += 1
             elif teacher.prefer_early_exit:
                 early_exit_total = 1
-                if any(daily_hours[d] > 0 and solver.Value(self.t_active[t_id, d, daily_hours[d] - 1]) == 0 for d in active_d_indices):
+                if any(daily_hours[d] > 0 and len(t_grid) > d and len(t_grid[d]) >= daily_hours[d] and t_grid[d][daily_hours[d] - 1] is None for d in active_d_indices):
                     early_exit_ok = 1
 
             # Ore buche del docente
@@ -1297,7 +1243,7 @@ class TimetableSolver:
                 if len(slot) == 2:
                     d, h = slot[0], slot[1]
                     if d < num_days and h < daily_hours[d]:
-                        if solver.Value(self.t_active[t_id, d, h]) == 0:
+                        if len(t_grid) > d and len(t_grid[d]) > h and t_grid[d][h] is None:
                             soft_slots_ok += 1
 
             # Ore doppie relative al docente
@@ -1308,7 +1254,7 @@ class TimetableSolver:
                     t_double_total += 1
                     for d in range(num_days):
                         for h in range(daily_hours[d] - 1):
-                            if solver.Value(self.x[a.id, d, h]) == 1 and solver.Value(self.x[a.id, d, h + 1]) == 1:
+                            if active_solver.Value(self.x[a.id, d, h]) == 1 and active_solver.Value(self.x[a.id, d, h + 1]) == 1:
                                 t_double_ok += 1
                                 break
 
