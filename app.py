@@ -2016,14 +2016,49 @@ with tabs[0]:
     st.divider()
     tot_weekly_h = sum(problem.config.daily_hours[:num_days])
     st.subheader("⏱️ Ore di Lezione Giornaliere")
-    st.caption(f"Configura quante ore di lezione si svolgono ogni giorno. Totale attuale: **{tot_weekly_h} ore settimanali per classe** {'(Quadro orario standard 30h esatte ✅)' if tot_weekly_h == 30 else ''}.")
+    st.caption(f"Regola le ore di lezione di ciascun giorno con i tasti **➕** e **➖**. Totale attuale: **{tot_weekly_h} ore settimanali per classe** {'(Quadro orario standard 30h esatte ✅)' if tot_weekly_h == 30 else ''}.")
+    
+    # Pulsanti di preset rapido
+    q_col1, q_col2, _ = st.columns([1.6, 1.6, 3])
+    with q_col1:
+        if st.button("⚡ Imposta tutte a 5h", use_container_width=True, help="Imposta rapidamente 5 ore per tutti i giorni"):
+            problem.config.daily_hours = [5] * num_days
+            st.session_state.result = None
+            st.rerun()
+    with q_col2:
+        if st.button("⚡ Imposta tutte a 6h", use_container_width=True, help="Imposta rapidamente 6 ore per tutti i giorni"):
+            problem.config.daily_hours = [6] * num_days
+            st.session_state.result = None
+            st.rerun()
+
     cols_days = st.columns(num_days)
-    new_daily_hours = []
+    new_daily_hours = list(problem.config.daily_hours[:num_days])
+    while len(new_daily_hours) < num_days:
+        new_daily_hours.append(5 if num_days == 6 else 6)
+
     for d_i in range(num_days):
         with cols_days[d_i]:
-            curr_h = problem.config.daily_hours[d_i] if d_i < len(problem.config.daily_hours) else 6
-            h_val = st.number_input(f"{DAYS_OF_WEEK[d_i]}", min_value=3, max_value=9, value=curr_h, key=f"dh_{d_i}")
-            new_daily_hours.append(h_val)
+            st.markdown(f"<div style='text-align: center; font-weight: 700; font-size: 0.95rem; color: #1e3a8a; margin-bottom: 6px;'>{DAYS_OF_WEEK[d_i]}</div>", unsafe_allow_html=True)
+            c_dec, c_val, c_inc = st.columns([1, 1.5, 1])
+            with c_dec:
+                if st.button("➖", key=f"dh_dec_{d_i}", help=f"Diminuisci ore di {DAYS_OF_WEEK[d_i]}", disabled=(new_daily_hours[d_i] <= 1), use_container_width=True):
+                    new_daily_hours[d_i] = max(1, new_daily_hours[d_i] - 1)
+                    problem.config.daily_hours = new_daily_hours
+                    st.session_state.result = None
+                    st.rerun()
+            with c_val:
+                st.markdown(f"""
+                <div style='background: #f8fafc; border: 2px solid #3b82f6; border-radius: 8px; text-align: center; font-size: 1.25rem; font-weight: 800; color: #1e3a8a; padding: 3px 0; margin-top: 1px;'>
+                    {new_daily_hours[d_i]}h
+                </div>
+                """, unsafe_allow_html=True)
+            with c_inc:
+                if st.button("➕", key=f"dh_inc_{d_i}", help=f"Aumenta ore di {DAYS_OF_WEEK[d_i]}", disabled=(new_daily_hours[d_i] >= 9), use_container_width=True):
+                    new_daily_hours[d_i] = min(9, new_daily_hours[d_i] + 1)
+                    problem.config.daily_hours = new_daily_hours
+                    st.session_state.result = None
+                    st.rerun()
+                    
     problem.config.daily_hours = new_daily_hours
     # -------------------------------------------------------------
     # SELEZIONE SECONDA LINGUA COMUNITARIA (2 ORE SETTIMANALI)
