@@ -809,9 +809,12 @@ def render_optimization_criteria_panel(problem: TimetableProblem, key_prefix: st
             st.slider("Peso Minimizzazione Buche Generali", 20, 250, step=10, key=f"{key_prefix}_w_gap_gen", on_change=on_custom_crit_change)
             st.slider("Priorità Evitamento Slot Sconsigliati", 10, 200, step=10, key=f"{key_prefix}_w_soft", on_change=on_custom_crit_change)
 
+# Versione Software Progressiva
+APP_VERSION = "v1.0.0"
+
 # Configurazione Pagina Streamlit
 st.set_page_config(
-    page_title="Orario Facile - Scuola Secondaria di I Grado (Medie)",
+    page_title=f"Orario Facile {APP_VERSION} - Scuola Secondaria di I Grado",
     page_icon="🎓",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -1697,8 +1700,13 @@ st.session_state["dada_model_active_toggle"] = bool(problem.config.is_dada)
 
 # SIDEBAR LATERALE
 with st.sidebar:
-    st.markdown("## 🏫 **Orario Scolastico**")
-    st.caption("Motore di Ottimizzazione con CP-SAT OR-Tools")
+    st.markdown(f"""
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+        <span style="font-size: 1.35rem; font-weight: 800; color: #1e3a8a;">🏫 Orario Scolastico</span>
+        <span style="background: #2563eb; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.76rem; font-weight: 700;">{APP_VERSION}</span>
+    </div>
+    """, unsafe_allow_html=True)
+    st.caption(f"Motore di Ottimizzazione CP-SAT OR-Tools · Build **{APP_VERSION}**")
     st.markdown("---")
     
     st.markdown("### 🎛️ **Scenari & Dati Demo**")
@@ -1760,6 +1768,9 @@ with st.sidebar:
         st.success("🏫 **DADA Standard Caricato**")
     elif is_std_act:
         st.success("🔄 **Standard Tradizionale Caricato**")
+
+    st.markdown("---")
+    st.caption(f"📌 **Orario Scolastico Facile** · Release `{APP_VERSION}`  \n🔒 Repository: [GitHub](https://github.com/Anisanimus/orario-scolastico)")
 
 tabs = st.tabs([
     "⚙️ 1. Configurazione Struttura Scolastica e Lezioni",
