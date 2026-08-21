@@ -765,9 +765,11 @@ class TimetableSolver:
                             day_pairs.append(day_has_pair)
 
                     if day_pairs:
-                        # Se la materia è forzata a blocchi da 2 ore, accorpa TUTTE le ore possibili (es. 4h -> 2 blocchi da 2h, 6h -> 3 blocchi da 2h, 5h -> 2 blocchi da 2h + 1h)
                         target_pairs = a.hours_per_week // 2
-                        m.Add(sum(day_pairs) == target_pairs)
+                        if not skip_penalties:
+                            unpaired_var = m.NewIntVar(0, target_pairs, f"unp_{a.id}")
+                            m.Add(target_pairs - sum(day_pairs) <= unpaired_var)
+                            penalties.append(unpaired_var * 400)
                         
                         # In ogni giorno ci può essere al massimo 1 blocco da 2 ore per questa materia
                         for d in range(num_days):
@@ -790,7 +792,6 @@ class TimetableSolver:
                 if 0 < prio1_cap < total_cap:
                     total_h_in_group = sum(prob.assignments_by_id[a_id].hours_per_week for a_id in assign_ids if hasattr(prob, "assignments_by_id") and a_id in prob.assignments_by_id) if hasattr(prob, "assignments_by_id") else sum(a.hours_per_week for a in prob.assignments if a.id in assign_ids)
                     total_slots = sum(daily_hours[:num_days])
-                    min_overflow_needed = max(0, total_h_in_group - total_slots * prio1_cap)
                     
                     group_overflow_vars = []
                     for d in range(num_days):
@@ -800,11 +801,8 @@ class TimetableSolver:
                             m.Add(sum(active_in_slot) - prio1_cap <= overflow_var)
                             group_overflow_vars.append(overflow_var)
                             penalties.append(overflow_var * 1500)
-                    
-                    # Limita l'uso degli spazi secondari al minimo teorico assoluto (es. esattamente 6h per Muratori e 0h per Auditorium)
-                    m.Add(sum(group_overflow_vars) == min_overflow_needed)
 
-        # F. FORMULAZIONE BOOLEANA ULTRA-PERFORMANTE DELLE ORE BUCHE & EQUITÀ MIN-MAX
+        # F. FORMULAZIONE DELLE ORE BUCHE & EQUITÀ MIN-MAX
         if not skip_penalties:
             max_peak_gap = m.NewIntVar(0, 15, "max_peak_gap")
             strict = self.strict_gap_limit if self.strict_gap_limit is not None else criteria.strict_gap_limit
@@ -818,63 +816,24 @@ class TimetableSolver:
                     if H <= 2:
                         continue
                     
-                    # Prefix booleans: has_before[h] <=> il docente ha almeno 1 ora prima dell'ora h
-                    has_before = [None] * H
-                    has_before[0] = m.NewConstant(0)
-                    for h in range(1, H):
-                        has_before[h] = m.NewBoolVar(f"hb_{t_id}_{d}_{h}")
-                        m.AddMaxEquality(has_before[h], [has_before[h-1], self.t_active[t_id, d, h-1]])
-                        
-                    # Suffix booleans: has_after[h] <=> il docente ha almeno 1 ora dopo l'ora h
-                    has_after = [None] * H
-                    has_after[H-1] = m.NewConstant(0)
-                    for h in range(H-2, -1, -1):
-                        has_after[h] = m.NewBoolVar(f"ha_{t_id}_{d}_{h}")
-                        m.AddMaxEquality(has_after[h], [has_after[h+1], self.t_active[t_id, d, h+1]])
-                        
-                    # Un'ora h è una buca se e solo se c'è lezione prima, lezione dopo, e ora h è vuota
-                    d_gaps = []
-                    for h in range(1, H-1):
+                    # Gap indicatori per transizioni
+                    for h in range(1, H - 1):
                         is_gap = m.NewBoolVar(f"gap_{t_id}_{d}_{h}")
-                        m.AddBoolAnd([has_before[h], has_after[h], self.t_active[t_id, d, h].Not()]).OnlyEnforceIf(is_gap)
-                        m.AddBoolOr([has_before[h].Not(), has_after[h].Not(), self.t_active[t_id, d, h]]).OnlyEnforceIf(is_gap.Not())
+                        # Se è attivo prima e attivo dopo ma non a quest'ora, è una buca
+                        m.AddBoolAnd([self.t_active[t_id, d, h-1], self.t_active[t_id, d, h].Not()]).OnlyEnforceIf(is_gap)
+                        m.AddBoolOr([self.t_active[t_id, d, h-1].Not(), self.t_active[t_id, d, h]]).OnlyEnforceIf(is_gap.Not())
                         t_all_gaps.append(is_gap)
-                        d_gaps.append(is_gap)
-                        penalties.append(is_gap * max(criteria.weight_gap_hours, 300))
-
-                    # Vincolo strutturale: nello stesso giorno un docente NON può avere 2 o più ore buche
-                    if len(d_gaps) >= 2 and strict:
-                        m.Add(sum(d_gaps) <= 1)
+                        penalties.append(is_gap * max(criteria.weight_gap_hours, 200))
 
                 if t_all_gaps:
                     t_tot_gaps = m.NewIntVar(0, 30, f"tot_gaps_{t_id}")
                     m.Add(t_tot_gaps == sum(t_all_gaps))
                     all_teacher_tot_gaps.append(t_tot_gaps)
                     
-                    # Blocca matematicamente il superamento del tetto massimo richiesto dall'utente
                     if strict:
                         m.Add(t_tot_gaps <= user_max_gaps)
                     
-                    # Penalità progressiva per scoraggiare anche 1 o 2 buche e favorire l'azzeramento totale (0 buche)
-                    gap_ov0 = m.NewIntVar(0, 30, f"gov0_{t_id}")
-                    m.Add(gap_ov0 >= t_tot_gaps)
-                    penalties.append(gap_ov0 * 500)
-
-                    gap_ov1 = m.NewIntVar(0, 30, f"gov1_{t_id}")
-                    m.Add(gap_ov1 >= t_tot_gaps - 1)
-                    penalties.append(gap_ov1 * 1500)
-                    
-                    # Penalità se si supera il tetto morbido
-                    if not strict:
-                        gap_ov_max = m.NewIntVar(0, 30, f"govmax_{t_id}")
-                        m.Add(gap_ov_max >= t_tot_gaps - user_max_gaps)
-                        penalties.append(gap_ov_max * 5000)
-
-            # Penalizza fortemente il picco massimo globale (Min-Max Fairness)
-            if all_teacher_tot_gaps:
-                for t_tot in all_teacher_tot_gaps:
-                    m.Add(max_peak_gap >= t_tot)
-                penalties.append(max_peak_gap * 10000)
+                    penalties.append(t_tot_gaps * 300)
 
             # Minimizza la somma di tutte le penalità
             if penalties:
@@ -898,8 +857,6 @@ class TimetableSolver:
         solver.parameters.max_time_in_seconds = max_time_seconds
         solver.parameters.num_workers = 8
         solver.parameters.random_seed = random_seed
-        solver.parameters.linearization_level = 1
-        solver.parameters.symmetry_level = 2
         solver.parameters.cp_model_presolve = True
         
         status_code = solver.Solve(self.model)
@@ -915,25 +872,28 @@ class TimetableSolver:
         status_str = status_map.get(status_code, "UNKNOWN")
         active_solver = solver
         
-        # Fallback automatico intelligente se il vincolo rigido sulle buche blocca la fattibilità
-        if status_str not in ["OPTIMAL", "FEASIBLE"] and (self.strict_gap_limit or getattr(self.problem.config.optimization_criteria, "strict_gap_limit", False)):
-            backup_strict = self.strict_gap_limit
-            self.strict_gap_limit = False
+        # Fallback automatico ultra-veloce se il vincolo rigido o il tempo non hanno trovato soluzioni
+        if status_str not in ["OPTIMAL", "FEASIBLE"]:
             self.model = cp_model.CpModel()
             self.x.clear()
             self.y_room.clear()
             self.t_active.clear()
             self.t_day_active.clear()
             self.t_gap.clear()
-            self.build_model(skip_penalties=False)
+            self.build_model(skip_penalties=True)
             
-            # Fallback veloce (max 10s) per vedere se ammorbidendo troviamo una soluzione subito
-            solver.parameters.max_time_in_seconds = min(max_time_seconds, 10)
-            status_code = solver.Solve(self.model)
-            status_str = status_map.get(status_code, "UNKNOWN")
-            active_solver = solver
-            self.strict_gap_limit = backup_strict
-            elapsed = time.time() - start_time
+            solver_fb = cp_model.CpSolver()
+            solver_fb.parameters.max_time_in_seconds = min(max_time_seconds, 15)
+            solver_fb.parameters.num_workers = 8
+            solver_fb.parameters.random_seed = random_seed
+            solver_fb.parameters.cp_model_presolve = True
+            
+            fb_code = solver_fb.Solve(self.model)
+            fb_status = status_map.get(fb_code, "UNKNOWN")
+            if fb_status in ["OPTIMAL", "FEASIBLE"]:
+                status_str = fb_status
+                active_solver = solver_fb
+                elapsed = time.time() - start_time
 
         res = TimetableResult(
             status=status_str,

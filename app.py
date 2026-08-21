@@ -810,7 +810,7 @@ def render_optimization_criteria_panel(problem: TimetableProblem, key_prefix: st
             st.slider("Priorità Evitamento Slot Sconsigliati", 10, 200, step=10, key=f"{key_prefix}_w_soft", on_change=on_custom_crit_change)
 
 # Versione Software Progressiva
-APP_VERSION = "v1.0.1"
+APP_VERSION = "v1.0.2"
 
 # Configurazione Pagina Streamlit
 st.set_page_config(
