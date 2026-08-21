@@ -732,37 +732,45 @@ class TimetableSolver:
                             group_overflow_vars.append(overflow_var)
                             penalties.append(overflow_var * 50)
 
-        # F. FORMULAZIONE DELLE ORE BUCHE & EQUITÀ MIN-MAX
+        # F. FORMULAZIONE DELLE ORE BUCHE & EQUITÀ MIN-MAX (Compressione Massima Buche)
         if not skip_penalties:
-            max_peak_gap = m.NewIntVar(0, 15, "max_peak_gap")
             strict = self.strict_gap_limit if self.strict_gap_limit is not None else criteria.strict_gap_limit
-            user_max_gaps = int(self.max_gap_limit if self.max_gap_limit is not None else criteria.max_gap_limit)
-            all_teacher_tot_gaps = []
+            user_max_gaps = int(self.max_gap_limit if self.max_gap_limit is not None else getattr(criteria, "max_gap_limit", 2))
 
             for t_id, teacher in prob.teachers.items():
                 t_assignments = [a for a in prob.assignments if a.teacher_id == t_id]
-                t_all_gaps = []
+                t_gaps_list = []
                 for d in range(num_days):
                     H = daily_hours[d]
                     if H <= 2:
                         continue
                     
-                    for h in range(1, H - 1):
-                        is_gap = m.NewBoolVar(f"gap_{t_id}_{d}_{h}")
-                        t_prev = sum(self.x[a.id, d, h-1] for a in t_assignments)
-                        t_curr = sum(self.x[a.id, d, h] for a in t_assignments)
-                        m.Add(is_gap >= t_prev - t_curr)
-                        t_all_gaps.append(is_gap)
-
-                if t_all_gaps:
-                    t_tot_gaps = m.NewIntVar(0, 30, f"tot_gaps_{t_id}")
-                    m.Add(t_tot_gaps == sum(t_all_gaps))
-                    all_teacher_tot_gaps.append(t_tot_gaps)
+                    u = {}
+                    for h in range(H):
+                        u[h] = sum(self.x[a.id, d, h] for a in t_assignments)
                     
+                    for h in range(1, H - 1):
+                        has_earlier = m.NewBoolVar(f"he_{t_id}_{d}_{h}")
+                        has_later = m.NewBoolVar(f"hl_{t_id}_{d}_{h}")
+                        m.Add(sum(u[k] for k in range(0, h)) >= 1).OnlyEnforceIf(has_earlier)
+                        m.Add(sum(u[k] for k in range(0, h)) == 0).OnlyEnforceIf(has_earlier.Not())
+                        m.Add(sum(u[k] for k in range(h + 1, H)) >= 1).OnlyEnforceIf(has_later)
+                        m.Add(sum(u[k] for k in range(h + 1, H)) == 0).OnlyEnforceIf(has_later.Not())
+                        
+                        gap_h = m.NewBoolVar(f"gap_{t_id}_{d}_{h}")
+                        m.Add(gap_h >= has_earlier + has_later - 1 - u[h])
+                        t_gaps_list.append(gap_h)
+                        penalties.append(gap_h * max(getattr(criteria, "weight_gap_hours", 1200), 1200))
+
+                if t_gaps_list:
+                    t_tot_gaps = m.NewIntVar(0, 30, f"tot_gaps_{t_id}")
+                    m.Add(t_tot_gaps == sum(t_gaps_list))
                     if strict:
                         m.Add(t_tot_gaps <= user_max_gaps)
-                    
-                    penalties.append(t_tot_gaps * max(criteria.weight_gap_hours, 200))
+                    else:
+                        excess_g = m.NewIntVar(0, 30, f"exg_{t_id}")
+                        m.Add(excess_g >= t_tot_gaps - user_max_gaps)
+                        penalties.append(excess_g * 2500)
 
             # Minimizza la somma di tutte le penalità
             if penalties:
@@ -784,7 +792,7 @@ class TimetableSolver:
         }
         
         # -------------------------------------------------------------
-        # FASE 1: Risoluzione ultra-rapida di FATTIBILITÀ SAT (100% vincoli rigidi e ore doppie)
+        # FASE 1: Risoluzione rapida di FATTIBILITÀ SAT (100% vincoli rigidi e ore doppie)
         # -------------------------------------------------------------
         self.model = cp_model.CpModel()
         self.x.clear()
@@ -796,7 +804,7 @@ class TimetableSolver:
         self.build_model(skip_penalties=True)
         
         solver_feas = cp_model.CpSolver()
-        solver_feas.parameters.max_time_in_seconds = max_time_seconds
+        solver_feas.parameters.max_time_in_seconds = min(15, max_time_seconds)
         solver_feas.parameters.num_workers = 8
         solver_feas.parameters.random_seed = random_seed
         solver_feas.parameters.cp_model_presolve = True
@@ -811,10 +819,10 @@ class TimetableSolver:
         res_feas = self._extract_result(solver_feas, feas_status, elapsed, 0.0, max_time_seconds)
         
         # -------------------------------------------------------------
-        # FASE 2: Ottimizzazione Avanzata (Desiderata, Giorno Libero, Buche) con Warm Start
+        # FASE 2: Ottimizzazione Avanzata & Compressione Buche con Warm Start
         # -------------------------------------------------------------
         t_remaining = max_time_seconds - int(elapsed)
-        if t_remaining >= 4:
+        if t_remaining >= 3:
             hints_x = {k: solver_feas.Value(v) for k, v in self.x.items()}
             
             self.model = cp_model.CpModel()
