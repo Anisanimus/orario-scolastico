@@ -810,7 +810,7 @@ def render_optimization_criteria_panel(problem: TimetableProblem, key_prefix: st
             st.slider("Priorità Evitamento Slot Sconsigliati", 10, 200, step=10, key=f"{key_prefix}_w_soft", on_change=on_custom_crit_change)
 
 # Versione Software Progressiva
-APP_VERSION = "v1.0.2"
+APP_VERSION = "v1.0.3"
 
 # Configurazione Pagina Streamlit
 st.set_page_config(
@@ -1704,6 +1704,8 @@ def compute_active_scenario(prob: TimetableProblem) -> str:
         or "tea" in prob.subjects
         or "teatro" in prob.rooms
     )
+    if getattr(prob.config, "num_days", 5) == 6:
+        return "standard_6d"
     if prob.config.is_dada:
         return "dada_theater" if has_theater else "dada"
     return "standard"
@@ -1726,9 +1728,17 @@ with st.sidebar:
     st.caption("Carica uno scenario demo completo di 18 classi e docenti:")
     
     is_std_act = (active_scen == "standard")
-    if st.button(f"{'✅ ' if is_std_act else ''}🔄 Standard Tradizionale (18 cl.)", type="primary" if is_std_act else "secondary", use_container_width=True, help="Carica scenario demo tradizionale per 18 classi con aule ordinarie"):
+    if st.button(f"{'✅ ' if is_std_act else ''}🔄 Standard (5 Giorni - 18 cl.)", type="primary" if is_std_act else "secondary", use_container_width=True, help="Carica scenario demo tradizionale su 5 giorni (Lun-Ven, 6 ore/giorno) per 18 classi con aule ordinarie"):
         st.session_state.clear()
-        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=False, with_theater=False)
+        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=False, with_theater=False, num_days=5)
+        st.session_state["dada_model_active_toggle"] = False
+        st.session_state.result = None
+        st.rerun()
+
+    is_std6_act = (active_scen == "standard_6d")
+    if st.button(f"{'✅ ' if is_std6_act else ''}📅 Settimana 6 Giorni (18 cl. + Giorno Libero)", type="primary" if is_std6_act else "secondary", use_container_width=True, help="Carica scenario demo su 6 giorni (Lun-Sab, 5 ore/giorno) con giorno libero preferito assegnato a ciascun docente"):
+        st.session_state.clear()
+        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=False, with_theater=False, num_days=6)
         st.session_state["dada_model_active_toggle"] = False
         st.session_state.result = None
         st.rerun()
@@ -1736,7 +1746,7 @@ with st.sidebar:
     is_dada_act = (active_scen == "dada")
     if st.button(f"{'✅ ' if is_dada_act else ''}🏫 Modello DADA (18 cl.)", type="primary" if is_dada_act else "secondary", use_container_width=True, help="Carica scenario demo DADA standard con aule disciplinari"):
         st.session_state.clear()
-        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=False)
+        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=False, num_days=5)
         st.session_state["dada_model_active_toggle"] = True
         st.session_state.result = None
         st.rerun()
@@ -1744,7 +1754,7 @@ with st.sidebar:
     is_tea_act = (active_scen == "dada_theater")
     if st.button(f"{'✅ ' if is_tea_act else ''}🎭 DADA + Teatro (18 cl.)", type="primary" if is_tea_act else "secondary", use_container_width=True, help="Carica scenario demo DADA con Laboratorio Teatro attivo"):
         st.session_state.clear()
-        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=True)
+        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=True, num_days=5)
         st.session_state["dada_model_active_toggle"] = True
         st.session_state.result = None
         st.rerun()
@@ -1775,12 +1785,14 @@ with st.sidebar:
 
     if is_empty_act:
         st.info("ℹ️ **Database Vuoto**: 0 docenti e 0 classi. Pronto per l'inserimento manuale nei Tab 1, 2, 3 o l'importazione Excel.")
+    elif is_std6_act:
+        st.success("📅 **Settimana 6 Giorni (Lun-Sab) Caricata**: Giorno libero individuale impostato per tutti i docenti!")
     elif is_tea_act:
         st.success("🎭 **DADA + Teatro Caricato**")
     elif is_dada_act:
         st.success("🏫 **DADA Standard Caricato**")
     elif is_std_act:
-        st.success("🔄 **Standard Tradizionale Caricato**")
+        st.success("🔄 **Standard Tradizionale (5 Giorni) Caricato**")
 
     st.markdown("---")
     st.caption(f"📌 **Orario Scolastico Facile** · Release `{APP_VERSION}`  \n🔒 Repository: [GitHub](https://github.com/Anisanimus/orario-scolastico)")

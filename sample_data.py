@@ -26,21 +26,22 @@ TEACHER_NAMES = [
     "Prof. Pellegrini", "Prof.ssa Palumbo", "Prof. Sanna", "Prof.ssa Grasso"
 ]
 
-def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang: str = "Spagnolo", with_theater: bool = False) -> TimetableProblem:
+def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang: str = "Spagnolo", with_theater: bool = False, num_days: int = 5) -> TimetableProblem:
     """
     Genera un problema realistico per una scuola media con `num_classes` classi (predefinito: 18 classi)
-    e la seconda lingua comunitaria scelta (Spagnolo, Francese, Tedesco, ecc.).
-    Se `with_theater=True`, attiva il Laboratorio di Teatro (1h per classe) scalando 1h da Italiano (5h)
-    e assegnando 1-2h di Teatro a ciascun docente di Lettere per mantenere 18h piene e 30h esatte per classe.
+    su 5 o 6 giorni di lezione settimanali.
     """
     if num_classes < 1:
         num_classes = 6
 
     theater_title = " (+ Teatro)" if with_theater else ""
+    days_title = " (Settimana 6 Giorni Lun-Sab)" if num_days == 6 else ""
+    daily_h = [5, 5, 5, 5, 5, 5] if num_days == 6 else [6, 6, 6, 6, 6]
+    
     config = SchoolConfig(
-        num_days=5,
-        daily_hours=[6, 6, 6, 6, 6],
-        school_name=f"Scuola Secondaria di I Grado 'Dante Alighieri' ({num_classes} Classi)" + (" (DADA)" if is_dada else "") + theater_title,
+        num_days=num_days,
+        daily_hours=daily_h,
+        school_name=f"Scuola Secondaria di I Grado 'Dante Alighieri' ({num_classes} Classi)" + (" (DADA)" if is_dada else "") + theater_title + days_title,
         school_type="Secondaria I Grado (Scuola Media)",
         is_dada=is_dada,
         dada_prefer_double_hours=True,
@@ -221,8 +222,8 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
             )
         else:
             t_name = next_teacher_name("Lettere")
-            # Docenti a tempo pieno con desiderata specifici
-            free_choice = ["Lunedì", "Venerdì", "Mercoledì", "Giovedì"][let_t_idx % 4] if (config.num_days == 6) else None
+            # Docenti a tempo pieno con desiderata specifici (giorno libero su 6 giorni)
+            free_choice = ["Lunedì", "Sabato", "Mercoledì", "Giovedì", "Venerdì", "Martedì"][(let_t_idx - 1) % 6] if (config.num_days == 6) else None
             late_choice = ["Lunedì", "Giovedì"] if (let_t_idx % 3 == 0) else []
             early_choice = ["Mercoledì", "Venerdì"] if (let_t_idx % 3 == 1) else []
             unavail = [[0, 0], [0, 1]] if (let_t_idx == 2) else []
@@ -290,7 +291,7 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
                     late_days=["Giovedì"]
                 )
             else:
-                free_choice = ["Venerdì", "Lunedì", "Mercoledì"][mat_t_idx % 3] if (config.num_days == 6) else None
+                free_choice = ["Venerdì", "Lunedì", "Mercoledì", "Sabato", "Giovedì", "Martedì"][(mat_t_idx - 1) % 6] if (config.num_days == 6) else None
                 create_and_add_teacher(
                     t_id, t_name, "A-28", 18, 
                     is_pt=False,
@@ -344,8 +345,6 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
 
     # C. INGLESE (A-24): 3h per classe
     ing_t_idx = 1
-    # C. INGLESE (A-24): 3h per classe. 6 classi = 18h piena cattedra!
-    ing_t_idx = 1
     current_ing_classes = []
     
     for c_id in class_keys:
@@ -353,7 +352,7 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
         if len(current_ing_classes) == 6:
             t_id = f"doc_ing_{ing_t_idx}"
             t_name = next_teacher_name("Inglese")
-            free_choice = ["Mercoledì", "Venerdì", "Lunedì"][ing_t_idx % 3] if (config.num_days == 6) else None
+            free_choice = ["Mercoledì", "Sabato", "Lunedì", "Venerdì"][(ing_t_idx - 1) % 4] if (config.num_days == 6) else None
             late_choice = ["Lunedì"] if (ing_t_idx == 2) else []
             early_choice = ["Venerdì"] if (ing_t_idx == 1) else []
             create_and_add_teacher(
@@ -421,11 +420,11 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
             if len(current_sub_classes) == 9: # 9 classi * 2h = 18h piena cattedra!
                 t_id = f"doc_{s_code}_{t_idx}"
                 t_name = next_teacher_name(s_label)
-                # Desiderata personali per docenti specialisti
+                # Desiderata personali per docenti specialisti (giorno libero su 6 giorni)
                 late_choice = ["Lunedì"] if (t_idx % 2 == 0) else []
                 early_choice = ["Venerdì"] if (t_idx % 2 == 1) else []
                 soft_slots = [[0, 0]] if (s_idx % 2 == 1) else []
-                free_choice = ["Giovedì", "Lunedì", "Martedì", "Venerdì", "Mercoledì"][(s_idx + t_idx) % 5] if (config.num_days == 6) else None
+                free_choice = ["Giovedì", "Lunedì", "Martedì", "Venerdì", "Mercoledì", "Sabato"][(s_idx * 2 + t_idx) % 6] if (config.num_days == 6) else None
                 
                 create_and_add_teacher(
                     t_id, t_name, s_cdc, 18,
@@ -493,11 +492,12 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
             is_pt = (cur_req_h < 18)
             t_name = next_teacher_name("Religione" if not is_pt else f"Part-Time Religione {cur_req_h}h")
             m_days = 2 if cur_req_h <= 6 else (3 if cur_req_h <= 12 else 4)
+            free_choice_rel = ["Sabato", "Lunedì"][(rel_t_idx - 1) % 2] if (config.num_days == 6) else None
             create_and_add_teacher(
                 t_id, t_name, "Religione", cur_req_h,
                 is_pt=is_pt,
                 max_days=m_days,
-                free_days=["Giovedì", "Venerdì"] if cur_req_h >= 12 else ["Lunedì", "Martedì", "Mercoledì"],
+                free_days=[free_choice_rel] if (free_choice_rel and not is_pt) else (["Giovedì", "Venerdì"] if cur_req_h >= 12 else ["Lunedì", "Martedì", "Mercoledì"]),
                 late=True
             )
             for c_k in current_rel_classes:

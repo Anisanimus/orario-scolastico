@@ -644,10 +644,14 @@ class TimetableSolver:
                     for h in range(H - 4):
                         m.Add(sum(self.t_active[t_id, d, h + k] for k in range(5)) <= 4)
 
-            # 4. DOCENTI A TEMPO PIENO (18H su 5 giorni): SPALMATO TASSATIVAMENTE SU TUTTI I 5 GIORNI (Min 2h per giorno)
+            # 4. DOCENTI A TEMPO PIENO:
             if num_days == 5 and t_total_h >= 18 and not teacher.is_part_time:
+                # Su 5 giorni: spalmato su tutti i 5 giorni
                 for d in range(5):
                     m.Add(self.t_day_active[t_id, d] == 1)
+            elif num_days == 6 and not teacher.is_part_time:
+                # Su 6 giorni: massimo 5 giorni di lavoro per garantire almeno 1 giorno libero
+                m.Add(sum(self.t_day_active[t_id, d] for d in range(6)) <= 5)
 
         criteria = getattr(prob.config, "optimization_criteria", None) or OptimizationCriteria()
 
@@ -675,10 +679,11 @@ class TimetableSolver:
                     if teacher.free_day_1: target_free_days.append(teacher.free_day_1)
                     if teacher.free_day_2: target_free_days.append(teacher.free_day_2)
 
+                w_base = max(getattr(criteria, "weight_free_day", 800), 800)
                 for p_idx, fd_name in enumerate(target_free_days):
                     fd_idx = self._get_day_index(fd_name)
-                    if fd_idx is not None:
-                        w = 50 if p_idx == 0 else 25
+                    if fd_idx is not None and fd_idx < num_days:
+                        w = w_base if p_idx == 0 else (w_base // 2)
                         penalties.append(self.t_day_active[t_id, fd_idx] * w)
 
         # C. DESIDERATA AVANZATI: Ingressi Posticipati & Uscite Anticipate (Pesi bilanciati per non frammentare l'orario)
@@ -857,6 +862,7 @@ class TimetableSolver:
         solver.parameters.max_time_in_seconds = max_time_seconds
         solver.parameters.num_workers = 8
         solver.parameters.random_seed = random_seed
+        solver.parameters.search_branching = cp_model.PORTFOLIO_SEARCH
         solver.parameters.cp_model_presolve = True
         
         status_code = solver.Solve(self.model)
@@ -883,9 +889,10 @@ class TimetableSolver:
             self.build_model(skip_penalties=True)
             
             solver_fb = cp_model.CpSolver()
-            solver_fb.parameters.max_time_in_seconds = min(max_time_seconds, 15)
+            solver_fb.parameters.max_time_in_seconds = max_time_seconds
             solver_fb.parameters.num_workers = 8
             solver_fb.parameters.random_seed = random_seed
+            solver_fb.parameters.search_branching = cp_model.PORTFOLIO_SEARCH
             solver_fb.parameters.cp_model_presolve = True
             
             fb_code = solver_fb.Solve(self.model)
