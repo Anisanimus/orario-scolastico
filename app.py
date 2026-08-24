@@ -3468,76 +3468,11 @@ with tabs[3]:
     render_support_management_tab(problem)
 
 # =============================================================
-# TAB 5: CATTEDRE & DESIDERATA DIDATTICI
+# TAB 5: QUADRATURA CATTEDRE & MONTE ORE
 # =============================================================
 with tabs[4]:
-    st.header("📚 Assegnazione Cattedre & Desiderata Didattici")
-    st.write("Definisci quali docenti insegnano nelle classi e configura le **regole didattiche** (ore doppie, max ore al giorno).")
-
-    with st.expander("📥 Importa / Esporta Cattedre & Desiderata Didattici con Excel (.xlsx) o CSV", expanded=False):
-        c_c_csv1, c_c_csv2 = st.columns(2)
-        with c_c_csv1:
-            st.download_button(
-                "📊 Scarica Modello Excel (.xlsx) Vuoto",
-                data=generate_excel_template(),
-                file_name="Template_Orario_Cattedre_Vuoto.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="tab4_dl_empty_xlsx",
-                use_container_width=True,
-                help="Scarica il file Excel vuoto formattato per compilare cattedre e docenti."
-            )
-            st.download_button(
-                "📄 Scarica Modello CSV Vuoto",
-                data=generate_csv_template().encode('utf-8-sig'),
-                file_name="Template_Orario_Cattedre_Vuoto.csv",
-                mime="text/csv",
-                key="tab4_dl_empty_csv",
-                use_container_width=True,
-                help="Scarica il file CSV vuoto pronto per compilare docenti, classi e cattedre in Excel."
-            )
-        with c_c_csv2:
-            st.download_button(
-                "📊 Esporta Cattedre Attuali in Excel (.xlsx)",
-                data=generate_excel_template(problem),
-                file_name=f"Cattedre_{problem.config.school_name.replace(' ', '_')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="tab4_dl_sample_xlsx",
-                use_container_width=True,
-                help="Esporta tutte le cattedre e i desiderata didattici attuali in Excel."
-            )
-            st.download_button(
-                "📄 Esporta Cattedre Attuali in CSV",
-                data=generate_csv_template(problem).encode('utf-8-sig'),
-                file_name=f"Cattedre_{problem.config.school_name.replace(' ', '_')}.csv",
-                mime="text/csv",
-                key="tab4_dl_sample_csv",
-                use_container_width=True,
-                help="Esporta tutte le cattedre e i desiderata didattici attuali in CSV per Excel."
-            )
-        up_c_file = st.file_uploader("📂 Carica File Cattedre (.xlsx o .csv)", type=["xlsx", "csv"], key="tab4_file_up")
-        if up_c_file is not None:
-            c_sig = f"{up_c_file.name}_{up_c_file.size}"
-            if st.session_state.get("processed_tab4_file") != c_sig:
-                try:
-                    fname = up_c_file.name.lower()
-                    if fname.endswith(".xlsx"):
-                        parsed_prob, logs = parse_excel_timetable(up_c_file.getvalue(), problem.config)
-                    else:
-                        content_str = up_c_file.getvalue().decode('utf-8-sig', errors='replace')
-                        parsed_prob, logs = parse_csv_timetable(content_str, problem.config)
-                    st.session_state["problem"] = parsed_prob
-                    st.session_state["result"] = None
-                    st.session_state["data_version"] = st.session_state.get("data_version", 0) + 1
-                    st.session_state["processed_tab4_file"] = c_sig
-                    st.session_state["tab4_upload_logs"] = logs
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Errore durante l'elaborazione del file: {e}")
-
-        if st.session_state.get("tab4_upload_logs"):
-            st.success("✅ Cattedre e dati didattici importati con successo!")
-            for log_msg in st.session_state["tab4_upload_logs"]:
-                st.info(log_msg)
+    st.header("📊 Quadratura Cattedre & Monte Ore")
+    st.write("Verifica l'allineamento delle **30 ore per classe** e la copertura delle cattedre (**18h / Part-Time**) di tutti i docenti.")
 
     if "editing_assign_idx" not in st.session_state:
         st.session_state.editing_assign_idx = None
