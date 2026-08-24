@@ -765,40 +765,27 @@ div[data-testid="stButton"] button[kind="secondary"]:hover {
     box-shadow: 0 0 8px rgba(9, 132, 227, 0.2) !important;
 }
 
-/* Stile discreto e compatto per i selettori numerici (Number Input) */
+/* Stile compatto e coerente per i selettori numerici (Number Input) */
 div[data-testid="stNumberInput"] div[data-baseweb="input"] {
-    background-color: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
     border-radius: 8px !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
     transition: all 0.2s ease !important;
 }
 
-div[data-testid="stNumberInput"] div[data-baseweb="input"]:focus-within {
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15) !important;
-}
-
 div[data-testid="stNumberInput"] input {
-    background-color: transparent !important;
     font-weight: 700 !important;
     font-size: 1rem !important;
-    color: #1e293b !important;
     text-align: center !important;
     padding: 4px 8px !important;
 }
 
 div[data-testid="stNumberInput"] button {
-    border-color: #e2e8f0 !important;
-    background-color: #ffffff !important;
-    color: #64748b !important;
-    border-radius: 4px !important;
+    border-radius: 6px !important;
     margin: 2px !important;
+    opacity: 0.85 !important;
 }
 
 div[data-testid="stNumberInput"] button:hover {
-    background-color: #f1f5f9 !important;
-    color: #1e293b !important;
+    opacity: 1 !important;
 }
 
 /* Stili Banner & Container Modifica Attiva Docenti */
