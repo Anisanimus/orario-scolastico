@@ -1008,6 +1008,63 @@ div[role="tablist"] button[aria-selected="true"] p {
     color: #1e3a8a !important;
     font-weight: 800 !important;
 }
+
+/* ============================================================= */
+/* SUPPORTO COMPLETO MODALITÀ SCURA PER LE SCHEDE (DARK THEME)   */
+/* ============================================================= */
+@media (prefers-color-scheme: dark) {
+    div[data-baseweb="tab-list"], 
+    div[role="tablist"], 
+    div[data-testid="stTabs"] > div:first-child {
+        background: #1e293b !important; /* Grigio scuro ardesia satinato */
+        border: 1px solid #334155 !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35) !important;
+    }
+
+    /* Schede Inattive Dark */
+    div[data-testid="stTabs"] button[data-testid="stTab"], 
+    div[data-testid="stTabs"] [data-baseweb="tab"], 
+    div[role="tablist"] button {
+        background-color: transparent !important;
+        color: #94a3b8 !important;
+    }
+
+    div[data-testid="stTabs"] button[data-testid="stTab"] p,
+    div[data-testid="stTabs"] [data-baseweb="tab"] p,
+    div[role="tablist"] button p {
+        color: #94a3b8 !important;
+    }
+
+    /* Hover Scheda Inattiva Dark */
+    div[data-testid="stTabs"] button[data-testid="stTab"]:hover,
+    div[data-testid="stTabs"] [data-baseweb="tab"]:hover,
+    div[role="tablist"] button:hover {
+        background-color: rgba(255, 255, 255, 0.08) !important;
+        color: #f8fafc !important;
+    }
+
+    div[data-testid="stTabs"] button[data-testid="stTab"]:hover p,
+    div[data-testid="stTabs"] [data-baseweb="tab"]:hover p,
+    div[role="tablist"] button:hover p {
+        color: #f8fafc !important;
+    }
+
+    /* Scheda Attiva Dark */
+    div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"],
+    div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
+    div[role="tablist"] button[aria-selected="true"] {
+        background-color: #334155 !important;
+        border: 1px solid #475569 !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] p,
+    div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] p,
+    div[role="tablist"] button[aria-selected="true"] p {
+        color: #38bdf8 !important; /* Celeste acceso luminoso ad alto contrasto */
+        font-weight: 800 !important;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
