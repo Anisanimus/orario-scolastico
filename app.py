@@ -17,19 +17,44 @@ import exporters
 importlib.reload(exporters)
 import importers
 importlib.reload(importers)
+import support_solver
+importlib.reload(support_solver)
+import support_ui
+importlib.reload(support_ui)
+import pdf_export
+importlib.reload(pdf_export)
+from support_ui import (
+    render_support_management_tab,
+    render_support_solver_section,
+    render_support_timetables_view
+)
+import schedule_validator
+importlib.reload(schedule_validator)
+import manual_editor_engine
+importlib.reload(manual_editor_engine)
+import schedule_importer
+importlib.reload(schedule_importer)
+import manual_editor_ui
+importlib.reload(manual_editor_ui)
+from manual_editor_ui import render_manual_editor_and_import_panel
 
 from models import (
     SchoolConfig, Teacher, SchoolClass, Subject, Classroom,
-    TeachingAssignment, TimetableProblem, DAYS_OF_WEEK, OptimizationCriteria, ParallelGroup
+    TeachingAssignment, TimetableProblem, DAYS_OF_WEEK, OptimizationCriteria, ParallelGroup,
+    StudentDVA, SupportAssignment, EnhancementAssignment, DISCIPLINARY_AREAS
 )
 from sample_data import get_sample_problem, get_empty_problem
 from solver import TimetableSolver, TimetableResult, get_room_bottlenecks, diagnose_problem_feasibility
-from exporters import generate_excel_timetable
-from pdf_export import generate_classes_pdf, generate_teachers_pdf, generate_rooms_pdf
+from exporters import generate_excel_timetable, generate_excel_tabellone_combo
+from pdf_export import (
+    generate_classes_pdf, generate_teachers_pdf, generate_rooms_pdf,
+    generate_support_teachers_pdf, generate_classes_with_support_pdf
+)
 from importers import (
     generate_csv_template, generate_excel_template, 
     parse_csv_timetable, parse_excel_timetable,
-    generate_teacher_desiderata_form, merge_teacher_desiderata_file
+    generate_teacher_desiderata_form, merge_teacher_desiderata_file,
+    generate_unified_school_excel, parse_unified_school_excel
 )
 
 def create_safe_teacher(
@@ -42,6 +67,7 @@ def create_safe_teacher(
     free_days: Optional[List[str]] = None,
     free_day_1: Optional[str] = None,
     free_day_2: Optional[str] = None,
+    preferred_areas: Optional[List[str]] = None,
     unavailable_slots: Optional[List[List[int]]] = None,
     required_slots: Optional[List[List[int]]] = None,
     prefer_late_entry: bool = False,
@@ -49,10 +75,12 @@ def create_safe_teacher(
     late_entry_days: Optional[List[str]] = None,
     early_exit_days: Optional[List[str]] = None,
     soft_avoid_slots: Optional[List[List[int]]] = None,
+    min_daily_hours: int = 2,
     max_daily_hours: int = 5,
     max_consecutive_hours: int = 4,
     max_gap_hours: int = 2,
-    prefer_compact_schedule: bool = True
+    prefer_compact_schedule: bool = True,
+    **kwargs
 ) -> Teacher:
     """Costruttore resiliente compatibile con qualsiasi versione in memoria di Teacher."""
     t = Teacher(id=id, name=name)
@@ -60,6 +88,7 @@ def create_safe_teacher(
     t.is_part_time = is_part_time
     t.contract_hours = contract_hours
     t.max_working_days = max_working_days
+    t.preferred_areas = preferred_areas or []
     
     # Normalizza lista giorni liberi
     f_list = [d for d in (free_days or []) if d and d != "Nessuno"]
@@ -78,127 +107,16 @@ def create_safe_teacher(
     t.late_entry_days = late_entry_days or []
     t.early_exit_days = early_exit_days or []
     t.soft_avoid_slots = soft_avoid_slots or []
+    t.min_daily_hours = min_daily_hours
     t.max_daily_hours = max_daily_hours
     t.max_consecutive_hours = max_consecutive_hours
     t.max_gap_hours = max_gap_hours
     t.prefer_compact_schedule = prefer_compact_schedule
+    for k, v in kwargs.items():
+        setattr(t, k, v)
     return t
 
-def render_html_schedule_table(
-    days_active: List[str],
-    daily_hours: List[int],
-    grid_matrix: List[List[Any]],
-    view_type: str = "class",
-    day_has_lessons: Optional[List[bool]] = None
-) -> str:
-    max_h = max(daily_hours) if daily_hours else 6
-    num_days = len(days_active)
-    day_col_width = f"{92 // num_days}%" if num_days > 0 else "18%"
-    
-    html = f"""
-    <div style="width: 100%; overflow-x: auto; margin: 15px 0 25px 0; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); background: #ffffff;">
-      <table style="width: 100%; border-collapse: collapse; table-layout: fixed; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 13px;">
-        <thead>
-          <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
-            <th style="width: 70px; min-width: 65px; padding: 12px 6px; text-align: center; color: #475569; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-right: 1px solid #e2e8f0;">Ora</th>
-    """
-    for d_name in days_active:
-        html += f"""
-            <th style="width: {day_col_width}; min-width: 130px; padding: 12px 8px; text-align: center; color: #1e293b; font-size: 13px; font-weight: 700; border-right: 1px solid #e2e8f0;">{d_name}</th>
-        """
-    html += """
-          </tr>
-        </thead>
-        <tbody>
-    """
-    for h in range(max_h):
-        html += f"""
-          <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 10px 4px; text-align: center; font-weight: 700; color: #64748b; background: #f8fafc; font-size: 12px; border-right: 1px solid #e2e8f0;">{h+1}ª Ora</td>
-        """
-        for d_idx, day_name in enumerate(days_active):
-            if h >= daily_hours[d_idx]:
-                html += """<td style="background: #f8fafc; border-right: 1px solid #f1f5f9;"></td>"""
-                continue
-                
-            is_free_day = (day_has_lessons is not None and not day_has_lessons[d_idx])
-            if is_free_day and view_type == "teacher":
-                html += """
-                <td style="padding: 6px; vertical-align: middle; text-align: center; background: #f0fdf4; border-right: 1px solid #e2e8f0;">
-                  <div style="background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; border-radius: 6px; padding: 8px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px;">🏖️ GIORNO LIBERO</div>
-                </td>
-                """
-                continue
-
-            slot = grid_matrix[d_idx][h] if (d_idx < len(grid_matrix) and h < len(grid_matrix[d_idx])) else None
-            if slot is not None:
-                accent_c = getattr(slot, "subject_color", "#3498db") or "#3498db"
-                clean_c = slot.class_name.replace("ª", "").replace(" ", "") if slot.class_name else ""
-                clean_s = slot.subject_name.split("(")[0].strip() if slot.subject_name else ""
-                clean_r = slot.room_name.split("(")[0].strip().replace("ª", "").replace("  ", " ") if getattr(slot, "room_name", None) else ""
-                
-                room_badge = ""
-                if clean_r:
-                    room_badge = f"""<div style="margin-top: 4px; display: inline-block; background: #e0f2fe; color: #0369a1; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 600;">📍 {clean_r}</div>"""
-
-                comp_badge = ""
-                if getattr(slot, "is_compresenza", False) or getattr(slot, "compresenza_text", ""):
-                    c_txt = getattr(slot, "compresenza_text", "") or "Compresenza"
-                    comp_badge = f"""<div style="margin-top: 4px; display: inline-block; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 4px; padding: 2px 6px; font-size: 10.5px; font-weight: 700;">👥 {c_txt}</div>"""
-
-                if view_type == "teacher":
-                    content = f"""
-                    <div style="border: 1px solid #e2e8f0; border-left: 4px solid {accent_c}; background: #ffffff; border-radius: 6px; padding: 6px 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
-                      <div style="font-weight: 700; color: #1e293b; font-size: 13px;">🏫 Classe {clean_c}</div>
-                      <div style="color: #475569; font-size: 12px; margin-top: 2px; font-weight: 500;">📖 {clean_s}</div>
-                      {room_badge}
-                      {comp_badge}
-                    </div>
-                    """
-                elif view_type == "class":
-                    content = f"""
-                    <div style="border: 1px solid #e2e8f0; border-left: 4px solid {accent_c}; background: #ffffff; border-radius: 6px; padding: 6px 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
-                      <div style="font-weight: 700; color: #1e293b; font-size: 13px;">📖 {clean_s}</div>
-                      <div style="color: #475569; font-size: 12px; margin-top: 2px; font-weight: 500;">👤 {slot.teacher_name}</div>
-                      {room_badge}
-                      {comp_badge}
-                    </div>
-                    """
-                else: # room
-                    content = f"""
-                    <div style="border: 1px solid #e2e8f0; border-left: 4px solid {accent_c}; background: #ffffff; border-radius: 6px; padding: 6px 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
-                      <div style="font-weight: 700; color: #1e293b; font-size: 13px;">🏫 Classe {clean_c}</div>
-                      <div style="color: #475569; font-size: 12px; margin-top: 2px; font-weight: 500;">📖 {clean_s}</div>
-                      <div style="color: #64748b; font-size: 11px; margin-top: 2px;">👤 {slot.teacher_name}</div>
-                      {comp_badge}
-                    </div>
-                    """
-                html += f"""<td style="padding: 5px; vertical-align: top; border-right: 1px solid #f1f5f9;">{content}</td>"""
-            else:
-                if view_type == "teacher":
-                    day_lessons = [grid_matrix[d_idx][hh] is not None for hh in range(daily_hours[d_idx])]
-                    first_l = next((idx for idx, val in enumerate(day_lessons) if val), None)
-                    last_l = next((idx for idx in reversed(range(len(day_lessons))) if day_lessons[idx]), None)
-                    
-                    if first_l is not None and last_l is not None and first_l < h < last_l:
-                        empty_content = """<div style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; border-radius: 6px; padding: 8px 4px; text-align: center; font-size: 11px; font-weight: 700; letter-spacing: 0.5px;">☕ ORA BUCA</div>"""
-                    else:
-                        empty_content = """<div style="text-align: center; color: #cbd5e1; font-weight: bold; padding: 8px 0;">-</div>"""
-                elif view_type == "room":
-                    empty_content = """<div style="background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; border-radius: 6px; padding: 6px 4px; text-align: center; font-size: 11px; font-weight: 600;">🟢 Libera</div>"""
-                else:
-                    empty_content = """<div style="text-align: center; color: #cbd5e1; font-weight: bold; padding: 8px 0;">-</div>"""
-                    
-                html += f"""<td style="padding: 5px; vertical-align: middle; border-right: 1px solid #f1f5f9;">{empty_content}</td>"""
-                
-        html += """</tr>"""
-        
-    html += """
-        </tbody>
-      </table>
-    </div>
-    """
-    return html
+from schedule_renderer import render_html_schedule_table
 
 def render_subject_coupling_panel(problem: TimetableProblem, key_prefix: str = "main"):
     """Pannello interattivo per scegliere quali materie accoppiare forzatamente a blocchi da 2 ore e quali no."""
@@ -512,7 +430,7 @@ def render_parallel_classes_panel(problem: TimetableProblem, key_prefix: str = "
                         parallel_hours=p_hours_input,
                         force_consecutive_block=(p_hours_input == 2),
                         room_id=None,
-                        is_same_teacher_merged=False,
+                        is_same_teacher_merged=True,
                         is_active=True
                     ))
                     st.session_state.result = None
@@ -810,7 +728,7 @@ def render_optimization_criteria_panel(problem: TimetableProblem, key_prefix: st
             st.slider("Priorità Evitamento Slot Sconsigliati", 10, 200, step=10, key=f"{key_prefix}_w_soft", on_change=on_custom_crit_change)
 
 # Versione Software Progressiva
-APP_VERSION = "v1.0.3"
+APP_VERSION = "v1.1.0"
 
 # Configurazione Pagina Streamlit
 st.set_page_config(
@@ -844,6 +762,42 @@ div[data-testid="stButton"] button[kind="secondary"]:hover {
     border-color: #0984e3 !important;
     color: #0984e3 !important;
     box-shadow: 0 0 8px rgba(9, 132, 227, 0.2) !important;
+}
+
+/* Stile discreto e compatto per i selettori numerici (Number Input) */
+div[data-testid="stNumberInput"] div[data-baseweb="input"] {
+    background-color: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+    transition: all 0.2s ease !important;
+}
+
+div[data-testid="stNumberInput"] div[data-baseweb="input"]:focus-within {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15) !important;
+}
+
+div[data-testid="stNumberInput"] input {
+    background-color: transparent !important;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+    color: #1e293b !important;
+    text-align: center !important;
+    padding: 4px 8px !important;
+}
+
+div[data-testid="stNumberInput"] button {
+    border-color: #e2e8f0 !important;
+    background-color: #ffffff !important;
+    color: #64748b !important;
+    border-radius: 4px !important;
+    margin: 2px !important;
+}
+
+div[data-testid="stNumberInput"] button:hover {
+    background-color: #f1f5f9 !important;
+    color: #1e293b !important;
 }
 
 /* Stili Banner & Container Modifica Attiva Docenti */
@@ -907,17 +861,123 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.edit-box-room-indicator) {
         box-shadow: 0 6px 24px rgba(52, 211, 153, 0.25) !important;
     }
 }
+
+/* ------------------------------------------------------------- */
+/* SEGMENTED CONTROL A PILLOLE (STILE APPLE / LINEAR / STRIPE)   */
+/* ------------------------------------------------------------- */
+div[data-baseweb="tab-list"], 
+div[role="tablist"], 
+div[data-testid="stTabs"] > div:first-child {
+    position: sticky !important;
+    top: 2.875rem !important;
+    z-index: 9999 !important;
+    background: #f1f5f9 !important; /* Contenitore Satinato Grigio Chiaro */
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 14px !important;
+    padding: 6px !important;
+    gap: 4px !important;
+    margin-bottom: 24px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Nascondi Scrollbar su Chrome/Safari/Edge */
+div[data-baseweb="tab-list"]::-webkit-scrollbar, 
+div[role="tablist"]::-webkit-scrollbar {
+    display: none !important;
+    height: 0px !important;
+}
+
+/* Nascondi categoricamente la linea rossa/arancione di Streamlit */
+div[data-baseweb="tab-highlight"], 
+div[data-baseweb="tab-border"], 
+div[data-testid="stTabs"] hr,
+div[data-testid="stTabs"] > div:first-child::after,
+div[data-baseweb="tab-list"]::after,
+div[role="tablist"]::after {
+    display: none !important;
+    height: 0px !important;
+    border: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
+/* Schede Inattive (Pillole Trasparenti) */
+div[data-testid="stTabs"] button[data-testid="stTab"], 
+div[data-testid="stTabs"] [data-baseweb="tab"], 
+div[role="tablist"] button {
+    background-color: transparent !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 8px 16px !important;
+    color: #475569 !important;
+    font-weight: 600 !important;
+    font-size: 0.90rem !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+}
+
+div[data-testid="stTabs"] button[data-testid="stTab"] p,
+div[data-testid="stTabs"] [data-baseweb="tab"] p,
+div[role="tablist"] button p {
+    color: #475569 !important;
+    font-weight: 600 !important;
+}
+
+/* Hover Scheda Inattiva */
+div[data-testid="stTabs"] button[data-testid="stTab"]:hover,
+div[data-testid="stTabs"] [data-baseweb="tab"]:hover,
+div[role="tablist"] button:hover {
+    background-color: rgba(255, 255, 255, 0.65) !important;
+    color: #0f172a !important;
+}
+
+div[data-testid="stTabs"] button[data-testid="stTab"]:hover p,
+div[data-testid="stTabs"] [data-baseweb="tab"]:hover p,
+div[role="tablist"] button:hover p {
+    color: #0f172a !important;
+}
+
+/* Scheda ATTIVA (Pillola Bianca in Rilievo con Ombra Morbida) */
+div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"],
+div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
+div[role="tablist"] button[aria-selected="true"] {
+    background-color: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.05) !important;
+    border-radius: 10px !important;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+    z-index: 10 !important;
+}
+
+div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] p,
+div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] p,
+div[role="tablist"] button[aria-selected="true"] p {
+    color: #1e3a8a !important;
+    font-weight: 800 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 # Inizializzazione Session State
+if "data_version" not in st.session_state:
+    st.session_state["data_version"] = 0
+
 if "problem" not in st.session_state:
-    st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=True)
+    st.session_state["problem"] = get_sample_problem(num_classes=18, is_dada=True, with_theater=True)
 
 if "result" not in st.session_state:
-    st.session_state.result = None
+    st.session_state["result"] = None
 
-problem: TimetableProblem = st.session_state.problem
+problem: TimetableProblem = st.session_state["problem"]
 
 # Garanzia di compatibilità per problem.config.daily_hours e num_days
 if not hasattr(problem.config, "num_days") or not problem.config.num_days:
@@ -936,6 +996,11 @@ def get_safe_daily_hours(prob: TimetableProblem, d_i: int) -> int:
 for t in problem.teachers.values():
     if not hasattr(t, "soft_avoid_slots"):
         t.soft_avoid_slots = []
+    if not hasattr(t, "preferred_areas") or not t.preferred_areas:
+        if "sostegno" in t.name.lower() or "sostegno" in getattr(t, "cdc", "").lower() or "admm" in getattr(t, "cdc", "").lower():
+            t.preferred_areas = ["scientifica"] if "1" in t.id or "2" in t.id or "3" in t.id or "4" in t.id or "5" in t.id else (["umanistica"] if "6" in t.id or "7" in t.id or "8" in t.id or "9" in t.id or "10" in t.id else (["artistica"] if "11" in t.id or "12" in t.id or "13" in t.id or "14" in t.id or "15" in t.id else ["lingue"]))
+        else:
+            t.preferred_areas = []
     if not hasattr(t, "required_slots"):
         t.required_slots = []
     if not hasattr(t, "prefer_late_entry"):
@@ -944,6 +1009,12 @@ for t in problem.teachers.values():
         t.prefer_early_exit = False
     if not hasattr(t, "is_part_time"):
         t.is_part_time = False
+
+# Sincronizzazione automatica assegnazioni sostegno demo (9h + 9h su due casi diversi)
+if getattr(problem, "support_assignments", None) and any(sa.hours_per_week == 18 for sa in problem.support_assignments):
+    sample_p = get_sample_problem(num_classes=len(problem.classes) or 18, is_dada=problem.config.is_dada, with_theater=True, num_days=problem.config.num_days)
+    problem.support_assignments = sample_p.support_assignments
+    problem.students_dva = sample_p.students_dva
 
 for a in problem.assignments:
     if not hasattr(a, "pinned_slots"):
@@ -961,16 +1032,16 @@ if "editing_room_id" not in st.session_state:
     st.session_state.editing_room_id = None
 
 # Garanzia di compatibilità per risultati già calcolati in sessione
-if st.session_state.result is not None:
-    res_obj = st.session_state.result
-    if not hasattr(res_obj, "late_entry_total"):
-        res_obj.late_entry_total = 0
-        res_obj.late_entry_satisfied = 0
-    if not hasattr(res_obj, "early_exit_total"):
-        res_obj.early_exit_total = 0
-        res_obj.early_exit_satisfied = 0
-    if not hasattr(res_obj, "soft_slots_total"):
-        res_obj.soft_slots_total = 0
+curr_res_obj = st.session_state.get("result")
+if curr_res_obj is not None:
+    if not hasattr(curr_res_obj, "late_entry_total"):
+        curr_res_obj.late_entry_total = 0
+        curr_res_obj.late_entry_satisfied = 0
+    if not hasattr(curr_res_obj, "early_exit_total"):
+        curr_res_obj.early_exit_total = 0
+        curr_res_obj.early_exit_satisfied = 0
+    if not hasattr(curr_res_obj, "soft_slots_total"):
+        curr_res_obj.soft_slots_total = 0
 
 
 # =============================================================
@@ -992,11 +1063,15 @@ def get_teacher_subjects_display(t: Teacher, problem: TimetableProblem) -> str:
         "A-30": "Musica",
         "A-01": "Arte e Immagine",
         "A-48": "Scienze Motorie",
-        "Religione": "Religione Cattolica"
+        "Religione": "Religione Cattolica",
+        "ADMM": "Sostegno Didattico (ADMM)",
+        "Sostegno": "Sostegno Didattico (ADMM)"
     }
     for k, v in mapping.items():
         if k in cdc_val:
             return v
+    if "sostegno" in t.name.lower() or "sostegno" in cdc_val.lower() or "admm" in cdc_val.lower():
+        return "Sostegno Didattico (ADMM)"
     return cdc_val if cdc_val else "Docente"
 
 def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teacher] = None, is_inline: bool = False):
@@ -1055,10 +1130,6 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
     
     st.divider()
     
-    # 2. Assegnazione Classi e Materie della Cattedra
-    st.markdown("#### 🏫 2. Assegnazione Classi e Materie della Cattedra")
-    st.caption("Assegna le classi e le materie insegnate da questo docente. Il monte ore si aggiorna in tempo reale.")
-    
     t_current_id = target_t.id if is_editing else "new_teacher"
     temp_key = f"teacher_temp_assigns{t_key_suffix}"
     if temp_key not in st.session_state:
@@ -1078,143 +1149,177 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
     
     temp_assigns = st.session_state[temp_key]
     
-    if problem.classes and problem.subjects:
-        c_add1, c_add2, c_add3, c_add4 = st.columns([3, 3, 2, 2])
-        with c_add1:
-            class_choices = list(problem.classes.keys())
-            sel_ac_class = st.selectbox("Classe", class_choices, format_func=lambda x: problem.classes[x].name if x in problem.classes else x, key=f"ac_class_sel{t_key_suffix}")
-        with c_add2:
-            subj_choices = list(problem.subjects.keys())
-            default_s_idx = 0
-            if t_cdc:
-                for s_i, s_k in enumerate(subj_choices):
-                    if problem.subjects[s_k].cdc == t_cdc or t_cdc in problem.subjects[s_k].cdc:
-                        default_s_idx = s_i
-                        break
-            sel_ac_subj = st.selectbox("Materia", subj_choices, index=default_s_idx, format_func=lambda x: problem.subjects[x].name if x in problem.subjects else x, key=f"ac_subj_sel{t_key_suffix}")
-        with c_add3:
-            def_hrs = 2
-            if sel_ac_subj in ["ita"]: def_hrs = 6
-            elif sel_ac_subj in ["mat"]: def_hrs = 4
-            elif sel_ac_subj in ["ing"]: def_hrs = 3
-            elif sel_ac_subj in ["sci"]: def_hrs = 2
-            elif sel_ac_subj in ["rel", "app"]: def_hrs = 1
-            sel_ac_hours = st.number_input("Ore Settimanali", min_value=1, max_value=10, value=def_hrs, key=f"ac_hours_inp{t_key_suffix}")
-        with c_add4:
-            st.write("")
-            if st.button("➕ Assegna Classe", key=f"btn_add_to_cattedra{t_key_suffix}", use_container_width=True, type="secondary"):
-                pref_dbl = problem.config.subject_block_preferences.get(sel_ac_subj, sel_ac_hours >= 2)
-                temp_assigns.append({
-                    "class_id": sel_ac_class,
-                    "subject_id": sel_ac_subj,
-                    "hours_per_week": sel_ac_hours,
-                    "force_double_hours": pref_dbl and (sel_ac_hours >= 2),
-                    "max_daily_hours": 2 if pref_dbl else (1 if sel_ac_hours in [2, 3] else 2)
-                })
-                st.rerun()
+    is_support_teacher = (
+        "sostegno" in t_cdc_label.lower() 
+        or "sostegno" in t_name.lower() 
+        or "sostegno" in t_cdc.lower() 
+        or "admm" in t_cdc.lower()
+        or bool(is_editing and getattr(target_t, "preferred_areas", []))
+    )
     
-    if temp_assigns:
-        tot_h_doc = sum(item["hours_per_week"] for item in temp_assigns)
-        target_h_doc = t_contract_h if (t_is_pt and t_contract_h) else 18
+    selected_areas = []
+    if is_support_teacher:
+        # 2. Aree Disciplinari / Materie di Preferenza per Docenti di Sostegno
+        st.markdown("#### 🎯 2. Aree Disciplinari di Preferenza (Sostegno & Compresenze)")
+        st.caption("Seleziona gli ambiti disciplinari su cui questo docente ha maggiore affinità o preferisce intervenire per le compresenze e il supporto didattico PEI.")
         
-        if tot_h_doc == target_h_doc:
-            st.success(f"💼 **Monte Ore Assegnato**: **{tot_h_doc} / {target_h_doc} ore** (Cattedra Completa al 100% ✅)")
-        elif tot_h_doc < target_h_doc:
-            st.warning(f"💼 **Monte Ore Assegnato**: **{tot_h_doc} / {target_h_doc} ore** (Mancano **{target_h_doc - tot_h_doc} ore**)")
-        else:
-            st.error(f"💼 **Monte Ore Assegnato**: **{tot_h_doc} / {target_h_doc} ore** (Supero di **+{tot_h_doc - target_h_doc} ore**)")
-    
-        st.markdown("""
-        <div style="display: grid; grid-template-columns: 2.8fr 3fr 1.4fr 2fr 0.8fr; gap: 8px; font-weight: 700; color: #1e3a8a; margin: 10px 0 4px 0; font-size: 0.88rem;">
-            <div>🏫 Modifica Classe</div>
-            <div>📖 Modifica Materia</div>
-            <div>⏱️ Ore/sett.</div>
-            <div>🔒 Blocco Orario</div>
-            <div style="text-align: center;">Elimina</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        class_keys = list(problem.classes.keys())
-        subj_keys = list(problem.subjects.keys())
-
-        for idx_a, item in enumerate(temp_assigns):
-            c_row1, c_row2, c_row3, c_row4, c_row5 = st.columns([2.8, 3, 1.4, 2, 0.8])
-            with c_row1:
-                cur_c_idx = class_keys.index(item['class_id']) if item['class_id'] in class_keys else 0
-                new_c_id = st.selectbox(
-                    "Classe",
-                    options=class_keys,
-                    index=cur_c_idx,
-                    format_func=lambda x: f"Classe {problem.classes[x].name}" if x in problem.classes else x,
-                    key=f"t_temp_c_{idx_a}_{item['class_id']}_{t_key_suffix}",
-                    label_visibility="collapsed"
-                )
-                if new_c_id != item['class_id']:
-                    item['class_id'] = new_c_id
-                    st.rerun()
-
-            with c_row2:
-                cur_s_idx = subj_keys.index(item['subject_id']) if item['subject_id'] in subj_keys else 0
-                new_s_id = st.selectbox(
-                    "Materia",
-                    options=subj_keys,
-                    index=cur_s_idx,
-                    format_func=lambda x: f"{problem.subjects[x].name}" if x in problem.subjects else x,
-                    key=f"t_temp_s_{idx_a}_{item['subject_id']}_{t_key_suffix}",
-                    label_visibility="collapsed"
-                )
-                if new_s_id != item['subject_id']:
-                    item['subject_id'] = new_s_id
-                    st.rerun()
-
-            with c_row3:
-                new_h = st.number_input(
-                    "Ore",
-                    min_value=1,
-                    max_value=10,
-                    value=item['hours_per_week'],
-                    key=f"t_temp_h_{idx_a}_{t_key_suffix}",
-                    label_visibility="collapsed"
-                )
-                item['hours_per_week'] = new_h
-
-            with c_row4:
-                is_ita_sub = (item['subject_id'] == "ita" or "italian" in item['subject_id'].lower())
-                if is_ita_sub and getattr(problem.config, "force_triple_hours_italian", False):
-                    st.markdown("📝 **3h Tema 🔒**")
-                    item['force_triple_hours'] = True
-                    item['force_double_hours'] = False
-                    item['max_daily_hours'] = 3
-                else:
-                    cur_pref_val = item.get('force_double_hours', False)
-                    new_dbl = st.checkbox(
-                        "Blocco 2h 🔒",
-                        value=bool(cur_pref_val),
-                        key=f"t_temp_dbl_{idx_a}_{t_key_suffix}"
-                    )
-                    item['force_double_hours'] = new_dbl
-                    item['force_triple_hours'] = False
-                    item['max_daily_hours'] = 2 if new_dbl else (1 if new_h in [2, 3] else 2)
-
-            with c_row5:
-                if st.button("🗑️", key=f"del_temp_a_{idx_a}_{t_key_suffix}", help="Rimuovi questa riga"):
-                    temp_assigns.pop(idx_a)
-                    st.rerun()
+        area_keys = list(DISCIPLINARY_AREAS.keys())
+        cur_areas = getattr(target_t, "preferred_areas", []) if is_editing else []
+        selected_areas = st.multiselect(
+            "Aree Disciplinari di Preferenza:",
+            area_keys,
+            default=[a for a in cur_areas if a in area_keys],
+            format_func=lambda x: f"{DISCIPLINARY_AREAS[x]['label']} ({DISCIPLINARY_AREAS[x]['desc']})",
+            key=f"t_pref_areas{t_key_suffix}",
+            help="Il solutore collocherà prioritariamente le ore di sostegno di questo docente durante le lezioni delle aree selezionate."
+        )
+        st.info("ℹ️ **Nota Cattedre & Casi DVA**: L'assegnazione alle classi e agli alunni DVA per questo docente avviene in modo dettagliato nel **Tab 4 (Sostegno & DVA)**.")
     else:
-        st.info("Nessuna classe ancora associata a questo docente. Usa il selettore sopra per aggiungere le classi.")
+        # 2. Assegnazione Classi e Materie della Cattedra Curricolare
+        st.markdown("#### 🏫 2. Assegnazione Classi e Materie della Cattedra")
+        st.caption("Assegna le classi e le materie insegnate da questo docente. Il monte ore si aggiorna in tempo reale.")
+        
+        if problem.classes and problem.subjects:
+            c_add1, c_add2, c_add3, c_add4 = st.columns([3, 3, 2, 2])
+            with c_add1:
+                class_choices = list(problem.classes.keys())
+                sel_ac_class = st.selectbox("Classe", class_choices, format_func=lambda x: problem.classes[x].name if x in problem.classes else x, key=f"ac_class_sel{t_key_suffix}")
+            with c_add2:
+                subj_choices = list(problem.subjects.keys())
+                default_s_idx = 0
+                if t_cdc:
+                    for s_i, s_k in enumerate(subj_choices):
+                        if problem.subjects[s_k].cdc == t_cdc or t_cdc in problem.subjects[s_k].cdc:
+                            default_s_idx = s_i
+                            break
+                sel_ac_subj = st.selectbox("Materia", subj_choices, index=default_s_idx, format_func=lambda x: problem.subjects[x].name if x in problem.subjects else x, key=f"ac_subj_sel{t_key_suffix}")
+            with c_add3:
+                def_hrs = 2
+                if sel_ac_subj in ["ita"]: def_hrs = 6
+                elif sel_ac_subj in ["mat"]: def_hrs = 4
+                elif sel_ac_subj in ["ing"]: def_hrs = 3
+                elif sel_ac_subj in ["sci"]: def_hrs = 2
+                elif sel_ac_subj in ["rel", "app"]: def_hrs = 1
+                sel_ac_hours = st.number_input("Ore Settimanali", min_value=1, max_value=10, value=def_hrs, key=f"ac_hours_inp{t_key_suffix}")
+            with c_add4:
+                st.write("")
+                if st.button("➕ Assegna Classe", key=f"btn_add_to_cattedra{t_key_suffix}", use_container_width=True, type="secondary"):
+                    pref_dbl = problem.config.subject_block_preferences.get(sel_ac_subj, sel_ac_hours >= 2)
+                    temp_assigns.append({
+                        "class_id": sel_ac_class,
+                        "subject_id": sel_ac_subj,
+                        "hours_per_week": sel_ac_hours,
+                        "force_double_hours": pref_dbl and (sel_ac_hours >= 2),
+                        "max_daily_hours": 2 if pref_dbl else (1 if sel_ac_hours in [2, 3] else 2)
+                    })
+                    st.rerun()
+        
+        if temp_assigns:
+            tot_h_doc = sum(item["hours_per_week"] for item in temp_assigns)
+            target_h_doc = t_contract_h if (t_is_pt and t_contract_h) else 18
+            
+            if tot_h_doc == target_h_doc:
+                st.success(f"💼 **Monte Ore Assegnato**: **{tot_h_doc} / {target_h_doc} ore** (Cattedra Completa al 100% ✅)")
+            elif tot_h_doc < target_h_doc:
+                st.warning(f"💼 **Monte Ore Assegnato**: **{tot_h_doc} / {target_h_doc} ore** (Mancano **{target_h_doc - tot_h_doc} ore**)")
+            else:
+                st.error(f"💼 **Monte Ore Assegnato**: **{tot_h_doc} / {target_h_doc} ore** (Supero di **+{tot_h_doc - target_h_doc} ore**)")
+        
+            st.markdown("""
+            <div style="display: grid; grid-template-columns: 2.8fr 3fr 1.4fr 2fr 0.8fr; gap: 8px; font-weight: 700; color: #1e3a8a; margin: 10px 0 4px 0; font-size: 0.88rem;">
+                <div>🏫 Modifica Classe</div>
+                <div>📖 Modifica Materia</div>
+                <div>⏱️ Ore/sett.</div>
+                <div>🔒 Blocco Orario</div>
+                <div style="text-align: center;">Elimina</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            class_keys = list(problem.classes.keys())
+            subj_keys = list(problem.subjects.keys())
+
+            for idx_a, item in enumerate(temp_assigns):
+                c_row1, c_row2, c_row3, c_row4, c_row5 = st.columns([2.8, 3, 1.4, 2, 0.8])
+                with c_row1:
+                    cur_c_idx = class_keys.index(item['class_id']) if item['class_id'] in class_keys else 0
+                    new_c_id = st.selectbox(
+                        "Classe",
+                        options=class_keys,
+                        index=cur_c_idx,
+                        format_func=lambda x: f"Classe {problem.classes[x].name}" if x in problem.classes else x,
+                        key=f"t_temp_c_{idx_a}_{item['class_id']}_{t_key_suffix}",
+                        label_visibility="collapsed"
+                    )
+                    if new_c_id != item['class_id']:
+                        item['class_id'] = new_c_id
+                        st.rerun()
+
+                with c_row2:
+                    cur_s_idx = subj_keys.index(item['subject_id']) if item['subject_id'] in subj_keys else 0
+                    new_s_id = st.selectbox(
+                        "Materia",
+                        options=subj_keys,
+                        index=cur_s_idx,
+                        format_func=lambda x: f"{problem.subjects[x].name}" if x in problem.subjects else x,
+                        key=f"t_temp_s_{idx_a}_{item['subject_id']}_{t_key_suffix}",
+                        label_visibility="collapsed"
+                    )
+                    if new_s_id != item['subject_id']:
+                        item['subject_id'] = new_s_id
+                        st.rerun()
+
+                with c_row3:
+                    new_h = st.number_input(
+                        "Ore",
+                        min_value=1,
+                        max_value=10,
+                        value=item['hours_per_week'],
+                        key=f"t_temp_h_{idx_a}_{t_key_suffix}",
+                        label_visibility="collapsed"
+                    )
+                    item['hours_per_week'] = new_h
+
+                with c_row4:
+                    is_ita_sub = (item['subject_id'] == "ita" or "italian" in item['subject_id'].lower())
+                    if is_ita_sub and getattr(problem.config, "force_triple_hours_italian", False):
+                        st.markdown("📝 **3h Tema 🔒**")
+                        item['force_triple_hours'] = True
+                        item['force_double_hours'] = False
+                        item['max_daily_hours'] = 3
+                    else:
+                        cur_pref_val = item.get('force_double_hours', False)
+                        new_dbl = st.checkbox(
+                            "Blocco 2h 🔒",
+                            value=bool(cur_pref_val),
+                            key=f"t_temp_dbl_{idx_a}_{t_key_suffix}"
+                        )
+                        item['force_double_hours'] = new_dbl
+                        item['force_triple_hours'] = False
+                        item['max_daily_hours'] = 2 if new_dbl else (1 if new_h in [2, 3] else 2)
+
+                with c_row5:
+                    if st.button("🗑️", key=f"del_temp_a_{idx_a}_{t_key_suffix}", help="Rimuovi questa riga"):
+                        temp_assigns.pop(idx_a)
+                        st.rerun()
+        else:
+            st.info("Nessuna classe ancora associata a questo docente. Usa il selettore sopra per aggiungere le classi.")
     
     st.divider()
     
-    # 3. Desiderata Didattici della Cattedra
-    st.markdown("#### 📚 3. Desiderata Didattici della Cattedra")
-    c_did1, c_did2, c_did3 = st.columns(3)
+    # 3. Regole di Servizio & Desiderata Didattici della Cattedra
+    st.markdown("#### 📚 3. Regole di Servizio & Carico Orario del Docente")
+    st.caption("Imposta i vincoli di servizio: ore minime/massime giornaliere e tetto ore continuative di lezione.")
+    c_did1, c_did2, c_did3, c_did4 = st.columns(4)
     with c_did1:
-        init_mdh = target_t.max_daily_hours if is_editing else 5
-        t_max_daily = st.number_input("Max ore di lezione al giorno", min_value=2, max_value=8, value=init_mdh, key=f"t_mdh_inp{t_key_suffix}")
+        init_mindh = getattr(target_t, "min_daily_hours", 2) if is_editing else 2
+        t_min_daily = st.number_input("Minimo ore/giorno (se presente)", min_value=1, max_value=4, value=init_mindh, key=f"t_mindh_inp{t_key_suffix}", help="Se presente a scuola, il docente farà almeno questo numero di ore (mai 1 ora singola da sola).")
     with c_did2:
-        init_mch = target_t.max_consecutive_hours if is_editing else 4
-        t_max_consec = st.number_input("Max ore consecutive", min_value=2, max_value=6, value=init_mch, key=f"t_mch_inp{t_key_suffix}")
+        init_mdh = target_t.max_daily_hours if is_editing else 5
+        t_max_daily = st.number_input("Max ore di lezione al giorno", min_value=2, max_value=8, value=init_mdh, key=f"t_mdh_inp{t_key_suffix}", help="Massimo numero di ore di lezione in una singola giornata (default 5h).")
     with c_did3:
+        init_mch = target_t.max_consecutive_hours if is_editing else 4
+        t_max_consec = st.number_input("Max ore consecutive", min_value=2, max_value=6, value=init_mch, key=f"t_mch_inp{t_key_suffix}", help="Massimo ore di fila senza pausa (default 4h). Se fa 5 ore in un giorno, viene imposto almeno 1 buco intermedio.")
+    with c_did4:
         init_mgh = target_t.max_gap_hours if is_editing else 2
         t_max_gaps = st.number_input("Max ore buche settimanali", min_value=0, max_value=6, value=min(init_mgh, 6), key=f"t_mgh_inp{t_key_suffix}")
     
@@ -1391,7 +1496,7 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
         save_label = "💾 Salva Modifiche Docente" if is_editing else "💾 Inserisci Nuovo Docente"
         if st.button(save_label, type="primary", use_container_width=True, key=f"btn_save_teacher{t_key_suffix}"):
             if t_id and t_name:
-                problem.teachers[t_id] = create_safe_teacher(
+                updated_t = create_safe_teacher(
                     id=t_id,
                     name=t_name,
                     cdc=t_cdc,
@@ -1399,6 +1504,7 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
                     contract_hours=t_contract_h if t_is_pt else None,
                     max_working_days=t_max_working_d if t_is_pt else None,
                     free_days=selected_free_days,
+                    preferred_areas=selected_areas,
                     unavailable_slots=selected_unavail,
                     required_slots=selected_required,
                     prefer_late_entry=t_prefer_late,
@@ -1406,10 +1512,12 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
                     late_entry_days=t_late_days,
                     early_exit_days=t_early_days,
                     soft_avoid_slots=selected_soft,
+                    min_daily_hours=t_min_daily,
                     max_daily_hours=t_max_daily,
                     max_consecutive_hours=t_max_consec,
                     max_gap_hours=t_max_gaps
                 )
+                problem.teachers[t_id] = updated_t
                 
                 old_pins_by_key = {}
                 for old_a in problem.assignments:
@@ -1417,25 +1525,31 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
                         old_pins_by_key[(old_a.class_id, old_a.subject_id)] = old_a.pinned_slots
     
                 problem.assignments = [a for a in problem.assignments if a.teacher_id != t_id]
-                for idx_a, item in enumerate(temp_assigns):
-                    assign_id = f"a_{t_id}_{item['class_id']}_{item['subject_id']}_{idx_a}".lower().replace(" ", "_")
-                    saved_pins = old_pins_by_key.get((item["class_id"], item["subject_id"]), [])
-                    problem.assignments.append(TeachingAssignment(
-                        id=assign_id,
-                        teacher_id=t_id,
-                        class_id=item["class_id"],
-                        subject_id=item["subject_id"],
-                        hours_per_week=item["hours_per_week"],
-                        force_double_hours=item.get("force_double_hours", False),
-                        force_triple_hours=item.get("force_triple_hours", False),
-                        max_daily_hours=item.get("max_daily_hours", 2),
-                        pinned_slots=saved_pins
-                    ))
+                if not is_support_teacher:
+                    for idx_a, item in enumerate(temp_assigns):
+                        assign_id = f"a_{t_id}_{item['class_id']}_{item['subject_id']}_{idx_a}".lower().replace(" ", "_")
+                        saved_pins = old_pins_by_key.get((item["class_id"], item["subject_id"]), [])
+                        problem.assignments.append(TeachingAssignment(
+                            id=assign_id,
+                            teacher_id=t_id,
+                            class_id=item["class_id"],
+                            subject_id=item["subject_id"],
+                            hours_per_week=item["hours_per_week"],
+                            force_double_hours=item.get("force_double_hours", False),
+                            force_triple_hours=item.get("force_triple_hours", False),
+                            max_daily_hours=item.get("max_daily_hours", 2),
+                            pinned_slots=saved_pins
+                        ))
     
-                if temp_key in st.session_state:
-                    del st.session_state[temp_key]
+                # Pulisci tutti i widget memorizzati per questo docente
+                for k in list(st.session_state.keys()):
+                    if k.endswith(f"_{t_id}") or f"_{t_id}_" in k or k.startswith(f"teacher_temp_assigns_{t_id}"):
+                        del st.session_state[k]
+
+                st.session_state["problem"] = problem
+                st.session_state["result"] = None
                 st.session_state.editing_teacher_id = None
-                st.success(f"✅ Docente '{t_name}', cattedra e desiderata salvati con successo!")
+                st.session_state["teacher_save_success"] = f"✅ Docente '{t_name}', cattedra e desiderata salvati con successo!"
                 st.rerun()
             else:
                 st.error("Inserisci Nome e Cognome del docente.")
@@ -1443,8 +1557,9 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
     with col_save_btn2:
         if is_editing:
             if st.button("❌ Chiudi / Annulla Modifica", use_container_width=True, key=f"btn_cancel_teacher{t_key_suffix}"):
-                if temp_key in st.session_state:
-                    del st.session_state[temp_key]
+                for k in list(st.session_state.keys()):
+                    if k.endswith(f"_{t_id}") or f"_{t_id}_" in k or k.startswith(f"teacher_temp_assigns_{t_id}"):
+                        del st.session_state[k]
                 st.session_state.editing_teacher_id = None
                 st.rerun()
 
@@ -1618,8 +1733,7 @@ def render_room_bottlenecks_resolver(problem: TimetableProblem, key_suffix: str 
                     for other_r_id in b["room_ids"]:
                         if other_r_id in problem.rooms:
                             problem.rooms[other_r_id].capacity = new_cap
-                    if "result" in st.session_state and st.session_state.result:
-                        st.session_state.result = None
+                    st.session_state["result"] = None
                     cl_names = ", ".join(problem.classes[c].name for c in sel_open_classes if c in problem.classes)
                     st.success(f"✅ Impostata capienza = {new_cap} per '{r_name}'! Le classi ({cl_names}) possono ora lavorare a classi aperte. Capienza totale: {new_cap * tot_slots}h settimanali.")
                     st.rerun()
@@ -1684,8 +1798,7 @@ def render_room_bottlenecks_resolver(problem: TimetableProblem, key_suffix: str 
                         is_special_lab=is_lab,
                         priority=sec_prio_val
                     )
-                    if "result" in st.session_state and st.session_state.result:
-                        st.session_state.result = None
+                    st.session_state["result"] = None
                     st.success(f"✅ Creato con successo lo spazio '{new_room_name_val}'! La disponibilità complessiva è salita a {(cur_cap + 1) * tot_slots}h settimanali.")
                     st.rerun()
         st.markdown("---")
@@ -1711,7 +1824,8 @@ def compute_active_scenario(prob: TimetableProblem) -> str:
     return "standard"
 
 active_scen = compute_active_scenario(problem)
-st.session_state["dada_model_active_toggle"] = bool(problem.config.is_dada)
+if "dada_model_active_toggle" not in st.session_state:
+    st.session_state["dada_model_active_toggle"] = bool(problem.config.is_dada)
 
 # SIDEBAR LATERALE
 with st.sidebar:
@@ -1795,15 +1909,208 @@ with st.sidebar:
         st.success("🔄 **Standard Tradizionale (5 Giorni) Caricato**")
 
     st.markdown("---")
-    st.caption(f"📌 **Orario Scolastico Facile** · Release `{APP_VERSION}`  \n🔒 Repository: [GitHub](https://github.com/Anisanimus/orario-scolastico)")
+    with st.expander("📖 **Manuale d'Uso Operativo (Guida Clic-per-Clic)**", expanded=False):
+        st.markdown("""
+# 📖 Manuale d'Uso: Guida Operativa Clic-per-Clic
+
+---
+
+## 🎛️ 1. BARRA LATERALE (SIDEBAR) – SCENARI & RESET
+
+- **Pulsante `🔄 Standard (5 Giorni - 18 cl.)`**: 
+  - *Cosa fa*: Cancella l'orario in memoria e carica lo scenario demo ministeriale su 5 giorni (Lunedì–Venerdì, 6 ore/giorno) per 18 classi con aule ordinarie.
+- **Pulsante `📅 Settimana 6 Giorni (18 cl. + Giorno Libero)`**: 
+  - *Cosa fa*: Carica lo scenario su 6 giorni (Lunedì–Sabato, 5 ore/giorno) pre-assegnando a ogni docente un giorno libero individuale preferito.
+- **Pulsante `🏫 Modello DADA (18 cl.)`**: 
+  - *Cosa fa*: Carica lo scenario con le 26 aule disciplinari tematiche DADA e docenti assegnati ai rispettivi laboratori.
+- **Pulsante `🎭 DADA + Teatro (18 cl.)`**: 
+  - *Cosa fa*: Carica lo scenario DADA comprensivo del laboratorio teatrale e spazi polivalenti.
+- **Pulsante `🗑️ Resetta Tutto (Database Vuoto)`**: 
+  - *Cosa fa*: Cancella all'istante tutti i docenti, classi, aule e cattedre, lasciando il database a 0 per inserire da zero i dati della propria scuola o importare un file Excel.
+- **Riquadro `📊 Stato Organico Attuale`**:
+  - Mostra i contatori in tempo reale di Docenti registrati, Classi, Ore totali di cattedra e Aule configurate.
+
+---
+
+## ⚙️ 2. SCHEDA 1 – STRUTTURA SCOLASTICA & TEMPI
+
+### A. Sezione Importazione & Modelli Offline
+- **Pulsante `📊 Scarica Modello Excel (.xlsx) Vuoto`**: Scarica sul computer un file Excel già formattato con le intestazioni standard (Docenti, Cattedre, Vincoli) da compilare offline.
+- **Pulsante `📄 Scarica Modello CSV Vuoto`**: Scarica lo stesso template in formato CSV (UTF-8 con BOM).
+- **Pulsante `📊 Esporta Dati Attuali in Excel (.xlsx)`**: Esporta tutti i dati attualmente presenti a schermo in un file Excel.
+- **File Uploader `📂 Trascina o seleziona il file compilato`**: Trascina il file compilato (.xlsx o .csv) per importare in un solo clic l'intero organico scolastico.
+
+### B. Parametri Scuola & Giorni
+- **Campo `Nome Istituto Comprensivo`**: Inserisci il nome della scuola (comparirà nelle intestazioni di tutte le stampe, PDF ed Excel).
+- **Radio `Articolazione Settimanale (5 o 6 Giorni)`**:
+  - Clic su `5 Giorni`: Imposta la settimana corta (Lun–Ven) e allinea automaticamente a 6 ore al giorno (30h totali).
+  - Clic su `6 Giorni`: Imposta la settimana lunga (Lun–Sab) e allinea a 5 ore al giorno (30h totali).
+- **Campo `Numero Totale Classi`**: Imposta il numero di classi (es. 18).
+  - Pulsante `➕ Crea Struttura Classi`: Genera in automatico le classi distribuite sulle sezioni A, B, C... da 1ª a 3ª media.
+  - Pulsante `🔄 Rigenera a N Classi`: Riadatta l'organico al nuovo numero ripulendo eventuali cattedre orfane.
+
+### C. Modello DADA & Blocchi da 2 Ore
+- **Interruttore `Attiva Modello DADA`**: Attiva la rotazione degli studenti nelle aule tematiche.
+- **Opzione `Politica Blocchi DADA`**:
+  - `🟢 Tolleranza Flessibile (Consigliato)`: Il solutore piazza i blocchi da 2 ore dove è più efficiente (anche 2ª-3ª o 4ª-5ª), riducendo al minimo le ore buche dei docenti.
+  - `🔒 Blocchi Rigidi Allineati (1-2, 3-4, 5-6)`: Forza i blocchi solo su ore pari/dispari per limitare gli spostamenti nei corridoi solo durante gli intervalli.
+
+### D. Ore Giornaliere (Selettori Numerici)
+- **Selettori compatti con freccette (▲ / ▼)** per ciascun giorno: Aumenta o diminuisce le ore di quel giorno da 1 a 9.
+- **Pulsante `⚡ Tutte a 5h`**: Forza tutti i giorni a 5 ore.
+- **Pulsante `⚡ Tutte a 6h`**: Forza tutti i giorni a 6 ore.
+
+### E. Seconda Lingua Comunitaria (2h)
+- **Menu a tendina**: Scegli tra Spagnolo, Francese, Tedesco o Personalizzata (adegua automaticamente le 2h per classe previste dal DPR 89/2009).
+
+---
+
+## 👥 3. SCHEDA 2 – CORPO DOCENTI & REGOLE DI SERVIZIO
+
+### A. Inserimento & Modifica Docente
+- **Pulsante / Expander `➕ Nuovo Docente`**: Apre il form di creazione.
+- **Campo `Nome e Cognome`**: Inserisci il nome del docente (es. *Prof.ssa Rossi M.*).
+- **Menu `Classe di Concorso (CDC)`**: Seleziona la materia ministeriale (A-22 Lettere, A-28 Matematica/Scienze, A-25 Inglese, A-49 Motoria, ecc.).
+- **Spunta `Docente Part-Time`**: 
+  - Se attivata, compaiono i campi *Ore Contrattuali* e *Max Giorni Lavorativi a Settimana* (vincolo rigido: il solutore non supererà mai quel numero di giorni di presenza).
+- **Menu `1° e 2° Giorno Libero Preferito`**: Seleziona i giorni di riposo desiderati.
+- **Spunte `Preferisce Entrata Posticipata` / `Preferisce Uscita Anticipata`**: Indica le fasce orarie gradite.
+- **Griglia `Indisponibilità Assoluta (Blocco Rigido)`**: Clicca sulle caselle orarie della matrice: le celle rosse diventano interdette al 100% e il solutore non assegnerà mai lezioni in quegli slot.
+- **Pulsante `💾 Salva Docente`**: Salva la scheda docente nel database.
+
+### B. Gestione Docenti Esistenti
+- **Pulsante `✏️ Modifica` su ciascuna card**: Apre il pannello di modifica evidenziato in blu con i dati precompilati per aggiornare desiderata o cattedre.
+- **Pulsante `🗑️ Elimina`**: Cancella il docente e rimuove le sue assegnazioni.
+- **Expander `🗑️ Gestione Multipla`**: Spunta più docenti e clicca `🗑️ Elimina Selezionati` per rimuoverli in blocco.
+
+### C. Regole di Servizio Ministeriali Rigide Garantite
+Il solutore rispetta automaticamente 4 regole categoriche per tutti i docenti:
+1. *Minimo 2 ore al giorno* (mai 1 sola ora isolata).
+2. *Massimo 4 ore consecutive* senza pause.
+3. *Massimo 5 ore al giorno solo se interrotte da almeno 1 ora di buca/pausa*.
+4. *Tetto massimo ore buche settimanali* impostato nella scheda.
+
+---
+
+## 🏫 4. SCHEDA 3 – CLASSI, AULE DADA & CLASSI APERTE
+
+### A. Quadro Orario Classi & Assegnazione Cattedre
+- Per ogni classe è presente la tabella delle discipline a 30 ore:
+  - *Italiano (6h)*, *Storia (2h)*, *Geografia (2h)*, *Matematica (4h)*, *Scienze (2h)*, *Inglese (3h)*, *2ª Lingua (2h)*, *Tecnologia (2h)*, *Arte (2h)*, *Musica (2h)*, *Motoria (2h)*, *Religione (1h)*, *Approfondimento (1h)*.
+- **Menu a tendina Docente**: Assegna l'insegnante per ciascuna materia.
+- **Spunta `🔗 Forza Blocco 2 Ore`**: Vincola la materia a svolgersi in un blocco consecutivo da 2 ore.
+- **Regola No 3 Ore di Fila**: Il solutore limita d'ufficio le materie a max 2 ore al giorno per classe (es. Italiano 6h viene distribuito in 3 giorni da 2h ciascuno, impedendo 3 o 4 ore di fila).
+
+### B. Ora di Approfondimento & Potenziamento (1h)
+- 1 ora settimanale per classe per completare il quadro a 30h:
+  - *In Lettere (A-22)*: Potenziamento linguistico, scrittura o metodo di studio.
+  - *Scientifico / STEM / Digitale*: Laboratori di coding e robotica in aula *R2-D2*.
+  - *Laboratorio Teatrale / Espressivo*: Attività in *Auditorium*.
+
+### C. Gruppi di Classi Aperte & Parallelismi Didattici
+- **Pulsante `➕ Nuovo Gruppo Classi Aperte`**:
+  - *Materia*: Scegli la disciplina da sincronizzare (es. *Scienze Motorie, Approfondimento, Lingue*).
+  - *Classi Coinvolte*: Seleziona 2 o più classi (es. *1A, 1B, 1C*).
+  - *Ore in Parallelo*: Numero di ore sincronizzate (1h o 2h).
+  - *Spazio Condiviso*: Assegna un'aula polivalente o palestra (es. *Auditorium, Bebe Vio*).
+  - **Due modalità automatiche**:
+    - *Docenti Distinti*: Le classi fanno lezione allo stesso momento con docenti diversi.
+    - *Docente Unico Accorpato*: Se lo stesso docente è assegnato a tutte le classi del gruppo, le lezioni vengono fuse in un'unica sessione comune nello spazio condiviso.
+
+### D. Rete 26 Aule DADA & Priorità Spazi
+- **Priorità 1 vs 2**: 
+  - *BEBE VIO (Priorità 1 - Principale)*: Viene saturata per prima fino a 30h.
+  - *PALESTRA MURATO (Priorità 2 - Riserva)*: Riceve solo il residuo e le lezioni contemporanee.
+- **Continuità Atomica 2 Ore**: Entrambe le ore di ogni blocco doppio si svolgono **sempre nella stessa identica aula/palestra**.
+
+---
+
+## ♿ 5. SCHEDA 4 – SOSTEGNO DIDATTICO & STUDENTI DVA
+
+- **Pulsante `➕ Aggiungi Studente DVA`**: Inserisci nome alunno, classe e monte ore settimanale da PEI.
+- **Assegnazione Docente di Sostegno**: Associa il docente all'alunno.
+- **Aree Disciplinari Preferite**: Seleziona le materie (Umanistica, Scientifica, Espressiva) su cui concentrare la compresenza.
+- **Pulsante `🚀 Genera Orario Sostegno`**: Incastra le ore di sostegno in compresenza con i docenti curricolari scelti, distribuendole equamente ed evitando buchi per l'insegnante di sostegno.
+
+---
+
+## 🚀 6. SCHEDA 6 – GENERATORE ORARIO (SOLUTORE CP-SAT)
+
+- **Slider `Tempo Massimo di Calcolo (Secondi)`**: Imposta 35-60 secondi.
+- **Campo `Seme Casuale (Random Seed)`**: Modificando questo intero (es. 42, 100, 777), il solutore esplora percorsi alternativi generando varianti orarie diverse a parità di vincoli.
+- **Pulsante `🚀 GENERA ORARIO SCOLASTICO`**:
+  - Avvia il solutore a 2 fasi:
+    - *Fase 1 (SAT)*: Soddisfa il 100% dei vincoli rigidi (cattedre, compresenze, capienze).
+    - *Fase 2 (Warm-Start)*: Ottimizza e comprime le ore buche, assegna i giorni liberi e i desiderata.
+  - Al termine mostra il report con lo stato (**FEASIBLE / OPTIMAL**), il tempo impiegato e il bilancio buche.
+
+---
+
+## 📅 7. SCHEDA 7 – VISTE ORARIO & ESPORTAZIONI
+
+### A. Le 5 Viste a Schermo
+- **Menu a tendina `Seleziona Tipologia Vista`**:
+  1. `🏫 Per Classe`: Orario con discipline, docenti, badge aula DADA e compresenze.
+  2. `👤 Per Docente Curricolare`: Quadro settimanale con classi, aule e badge `☕ ORA BUCA`.
+  3. `♿ Per Docente di Sostegno`: Dettaglio con badge studente, materia curricolare in corso e docente affiancato.
+  4. `🏫 Classe con Sostegni Integrati`: Tabellone completo della classe con docenti curricolari + badge viola di tutti i docenti di sostegno compresenti.
+  5. `🏛️ Per Aula / Spazio DADA`: Tabellone di occupazione dei 26 spazi con le classi ospitate ora per ora.
+
+### B. Pulsanti di Download Esportazioni
+- **Pulsante `📄 Scarica PDF Orario Classi`**: Genera il PDF multipagina vettoriale impaginato con tutte le classi.
+- **Pulsante `📄 Scarica PDF Orario Docenti`**: Genera il PDF con tutti gli orari dei docenti.
+- **Pulsante `📄 Scarica PDF Orario Sostegno`**: Genera il PDF dedicato agli insegnanti di sostegno.
+- **Pulsante `📊 Scarica Tabellone Generale Excel (.xlsx)`**: Scarica il file Excel con **tabellone unificato (un docente per riga, curricolari + sostegno)** con tutte le ore della settimana per la gestione di presenze e supplenze.
+        """)
+
+    # Dialogo Novità Versione v1.1.0
+    if hasattr(st, "dialog"):
+        @st.dialog(f"✨ Novità della Versione {APP_VERSION}")
+        def show_whats_new_dialog():
+            st.markdown("""
+### 🚀 Nuove Funzionalità & Miglioramenti Chiave
+
+1. **✏️ Ritocchi Manuali & Smart Swap (Scheda 6)**:
+   - Spostamento atomico manuale o scambio tra due ore con controllo conflitti semaforico istantaneo (🟢 Valido / 🔴 Conflitto).
+   - **Assistente Smart Repair**: calcola automaticamente la catena minima di spostamenti a cascata (1-3 mosse) per risolvere il conflitto senza rompere i vincoli scolastici.
+   - Pulsante **"↩️ Annulla Ultima Modifica"** per il ripristino istantaneo dello stato precedente.
+
+2. **📥 Importazione Orario da Excel con Audit Conflitti**:
+   - Carica un orario compilato o ritoccato a mano in formato `.xlsx`.
+   - **Audit automatico immediato** che rileva sovrapposizioni docenti, aule sature, ore per materia mancanti o in eccesso.
+   - Promozione a *"Orario Curricolare Ufficiale"* su cui incastrare il sostegno.
+
+3. **♿ Generatore Sostegno & Compresenze Prioritarie**:
+   - Barra di avanzamento in tempo reale per la generazione del sostegno.
+   - Algoritmo di massimizzazione delle doppie coperture e rispetto rigoroso delle preferenze PEI.
+
+4. **🔒 Anonimizzazione Completa & Organico Certificato**:
+   - Nomi dei docenti di fantasia realistici ed eleganti, nel rispetto del 100% dell'organico e cattedre ministeriali.
+            """)
+            if st.button("👍 Ho Capito", type="primary", use_container_width=True):
+                st.rerun()
+
+        if st.button(f"✨ Novità Versione {APP_VERSION}", use_container_width=True):
+            show_whats_new_dialog()
+    else:
+        with st.expander(f"✨ Novità Versione {APP_VERSION}", expanded=False):
+            st.markdown("""
+- **✏️ Ritocchi Manuali & Smart Swap**: Spostamento manuale e riparazione automatica CP-SAT a catena minima.
+- **📥 Importazione Orario Excel**: Caricamento con validatore deterministico di conflitti ed errori.
+- **♿ Sostegno & Compresenze**: Priorità di copertura PEI e barra di avanzamento del calcolo.
+- **🔒 Organico Certificato**: Nomi di fantasia realistici a tutela della privacy.
+            """)
+
+    st.caption(f"📌 **Orario Scolastico Facile** · Release `{APP_VERSION}` · [GitHub](https://github.com/Anisanimus/orario-scolastico)")
 
 tabs = st.tabs([
-    "⚙️ 1. Configurazione Struttura Scolastica e Lezioni",
-    "👥 2. Docenti, Cattedre & Desiderata",
-    "🏫 3. Classi & Aule / Laboratori",
-    "📊 4. Riepilogo & Quadratura Cattedre",
-    "🚀 5. Genera Orario",
-    "📅 6. Visualizza & Esporta"
+    "⚙️ 1. Struttura",
+    "👥 2. Docenti & Cattedre",
+    "🏫 3. Classi & Aule",
+    "🤝 4. Sostegno & DVA",
+    "📊 5. Quadratura",
+    "🚀 6. Genera Orario",
+    "📅 7. Visualizza & Esporta"
 ])
 
 # =============================================================
@@ -1812,74 +2119,75 @@ tabs = st.tabs([
 with tabs[0]:
     st.header("⚙️ Configurazione Struttura Scolastica e Lezioni")
     
-    with st.expander("📥 Importazione Rapida da File Excel (.xlsx) o CSV (Docenti, Desiderata, Classi, Cattedre)", expanded=False):
-        st.write("Puoi compilare offline l'orario della tua scuola su **Microsoft Excel, Google Fogli o LibreOffice Calc** utilizzando il nostro modello standard e ricaricarlo in un clic:")
+    with st.expander("📁 Gestione Dati Completa Scuola & Backup Master (.xlsx)", expanded=False):
+        st.write("Scarica o ricarica l'intera banca dati della scuola (**Struttura, Docenti, Classi, Aule DADA, Cattedre, Sostegno, Parallelismi**) in un **unico file Excel multi-foglio**:")
         c_csv_d1, c_csv_d2 = st.columns(2)
         with c_csv_d1:
+            st.markdown("##### 📥 Esporta / Scarica Backup")
             st.download_button(
-                "📊 Scarica Modello Excel (.xlsx) Vuoto",
-                data=generate_excel_template(),
-                file_name="Template_Orario_Docenti_Cattedre_Vuoto.xlsx",
+                "📥 Scarica Backup Completo Scuola (.xlsx)",
+                data=generate_unified_school_excel(problem),
+                file_name=f"Backup_Scuola_Completo_{problem.config.school_name.replace(' ', '_')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="tab1_dl_master_xlsx",
                 use_container_width=True,
-                help="Scarica il file Excel (.xlsx) formattato con intestazioni e larghezza colonne automatica."
+                help="Scarica un unico file Excel (.xlsx) contenente tutti i fogli della scuola: docenti, classi, aule, cattedre, sostegno e parallelismi."
             )
             st.download_button(
-                "📄 Scarica Modello CSV Vuoto",
-                data=generate_csv_template().encode('utf-8-sig'),
-                file_name="Template_Orario_Docenti_Cattedre_Vuoto.csv",
-                mime="text/csv",
+                "📊 Scarica Modello Vuoto Multi-Foglio (.xlsx)",
+                data=generate_unified_school_excel(None),
+                file_name="Modello_Master_Scuola_Vuoto.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="tab1_dl_empty_master_xlsx",
                 use_container_width=True,
-                help="Scarica il file CSV vuoto da compilare su Excel o Calc."
+                help="Scarica il modello Excel vuoto formattato su 7 fogli pronto per la compilazione offline."
             )
         with c_csv_d2:
-            st.download_button(
-                "📊 Esporta Dati Attuali in Excel (.xlsx)",
-                data=generate_excel_template(problem),
-                file_name=f"Orario_{problem.config.school_name.replace(' ', '_')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                help="Esporta tutti i docenti, classi e cattedre attuali in formato Excel."
-            )
-            st.download_button(
-                "📄 Esporta Dati Attuali in CSV",
-                data=generate_csv_template(problem).encode('utf-8-sig'),
-                file_name=f"Orario_{problem.config.school_name.replace(' ', '_')}.csv",
-                mime="text/csv",
-                use_container_width=True,
-                help="Esporta tutti i docenti, classi e cattedre attuali in formato CSV."
-            )
-        
-        up_file_tab1 = st.file_uploader("📂 Trascina o seleziona il file compilato (.xlsx o .csv)", type=["xlsx", "csv"], key="tab1_file_up")
-        if up_file_tab1 is not None:
-            try:
-                fname = up_file_tab1.name.lower()
-                if fname.endswith(".xlsx"):
-                    parsed_prob, logs = parse_excel_timetable(up_file_tab1.getvalue(), problem.config)
-                else:
-                    content_str = up_file_tab1.getvalue().decode('utf-8-sig', errors='replace')
-                    parsed_prob, logs = parse_csv_timetable(content_str, problem.config)
-                st.session_state.problem = parsed_prob
-                st.session_state.result = None
-                st.success("✅ File importato con successo!")
-                for log_msg in logs:
-                    st.info(log_msg)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Errore durante l'elaborazione del file: {e}")
+            st.markdown("##### 📤 Ripristina / Carica Backup")
+            up_file_tab1 = st.file_uploader("📂 Trascina o seleziona il file (.xlsx o .csv)", type=["xlsx", "csv"], key="tab1_file_up")
+            if up_file_tab1 is not None:
+                file_sig = f"{up_file_tab1.name}_{up_file_tab1.size}"
+                if st.session_state.get("processed_tab1_file") != file_sig:
+                    try:
+                        fname = up_file_tab1.name.lower()
+                        if fname.endswith(".xlsx"):
+                            parsed_prob, logs = parse_unified_school_excel(up_file_tab1.getvalue(), problem.config)
+                        else:
+                            content_str = up_file_tab1.getvalue().decode('utf-8-sig', errors='replace')
+                            parsed_prob, logs = parse_csv_timetable(content_str, problem.config)
+                        st.session_state["problem"] = parsed_prob
+                        st.session_state["result"] = None
+                        st.session_state["data_version"] = st.session_state.get("data_version", 0) + 1
+                        st.session_state["processed_tab1_file"] = file_sig
+                        st.session_state["tab1_upload_logs"] = logs
+                        st.session_state["tab1_upload_success"] = True
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore durante l'elaborazione del file: {e}")
 
+            if st.session_state.get("tab1_upload_success") and st.session_state.get("tab1_upload_logs"):
+                st.success("🎉 Database scuola importato con successo!")
+                for log_msg in st.session_state.get("tab1_upload_logs", []):
+                    st.info(log_msg)
+
+    v = st.session_state.get("data_version", 0)
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
-        problem.config.school_name = st.text_input("Nome Istituto Comprensivo / Scuola Media", value=problem.config.school_name)
+        problem.config.school_name = st.text_input(
+            "Nome Istituto Comprensivo / Scuola Media",
+            value=problem.config.school_name,
+            key=f"school_name_txt_{v}"
+        )
         problem.config.school_type = st.selectbox(
             "Tipologia Scuola",
             ["Secondaria I Grado (Scuola Media)", "Istituto Comprensivo (Sezione Medie)"],
-            index=0
+            index=0 if "Istituto Comprensivo" not in problem.config.school_type else 1,
+            key=f"school_type_sel_{v}"
         )
     
     with col2:
         def on_num_days_changed():
-            new_days = st.session_state["sel_num_days_radio"]
+            new_days = st.session_state.get(f"sel_num_days_radio_{v}", problem.config.num_days)
             if new_days != problem.config.num_days:
                 problem.config.num_days = new_days
                 if new_days == 6:
@@ -1890,13 +2198,13 @@ with tabs[0]:
                     problem.config.daily_hours = [6, 6, 6, 6, 6]
                     for i in range(5):
                         st.session_state[f"dh_{i}"] = 6
-                st.session_state.result = None
+                st.session_state["result"] = None
 
         num_days = st.radio(
             "Articolazione Settimanale",
             [5, 6],
             index=0 if problem.config.num_days == 5 else 1,
-            key="sel_num_days_radio",
+            key=f"sel_num_days_radio_{v}",
             on_change=on_num_days_changed,
             format_func=lambda x: f"{x} Giorni (Settimana {'Corta Lun-Ven: 6h/dì' if x==5 else 'Lunga Lun-Sab: 5h/dì'})",
             horizontal=True
@@ -2016,7 +2324,7 @@ with tabs[0]:
     st.divider()
     tot_weekly_h = sum(problem.config.daily_hours[:num_days])
     st.subheader("⏱️ Ore di Lezione Giornaliere")
-    st.caption(f"Regola le ore di lezione di ciascun giorno con i tasti **➕** e **➖**. Totale attuale: **{tot_weekly_h} ore settimanali per classe** {'(Quadro orario standard 30h esatte ✅)' if tot_weekly_h == 30 else ''}.")
+    st.caption(f"Imposta le ore di lezione di ciascun giorno con le freccette. Totale attuale: **{tot_weekly_h} ore settimanali per classe** {'(Quadro orario standard 30h esatte ✅)' if tot_weekly_h == 30 else ''}.")
     
     # Pulsanti di preset rapido
     q_col1, q_col2, _ = st.columns([1.2, 1.2, 3])
@@ -2036,26 +2344,27 @@ with tabs[0]:
     while len(new_daily_hours) < num_days:
         new_daily_hours.append(5 if num_days == 6 else 6)
 
+    updated_hours = []
+    has_changed = False
     for d_i in range(num_days):
         with cols_days[d_i]:
-            with st.container(border=True):
-                st.markdown(f"<div style='text-align: center; font-weight: 700; font-size: 0.83rem; color: #1e3a8a; margin-bottom: 2px;'>{DAYS_OF_WEEK[d_i]}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div style='text-align: center; font-size: 1.05rem; font-weight: 800; color: #2563eb; margin: 1px 0 6px 0;'>{new_daily_hours[d_i]} ore</div>", unsafe_allow_html=True)
-                c_dec, c_inc = st.columns(2)
-                with c_dec:
-                    if st.button("➖", key=f"dh_dec_{d_i}", help=f"Diminuisci ore di {DAYS_OF_WEEK[d_i]}", disabled=(new_daily_hours[d_i] <= 1), use_container_width=True):
-                        new_daily_hours[d_i] = max(1, new_daily_hours[d_i] - 1)
-                        problem.config.daily_hours = new_daily_hours
-                        st.session_state.result = None
-                        st.rerun()
-                with c_inc:
-                    if st.button("➕", key=f"dh_inc_{d_i}", help=f"Aumenta ore di {DAYS_OF_WEEK[d_i]}", disabled=(new_daily_hours[d_i] >= 9), use_container_width=True):
-                        new_daily_hours[d_i] = min(9, new_daily_hours[d_i] + 1)
-                        problem.config.daily_hours = new_daily_hours
-                        st.session_state.result = None
-                        st.rerun()
-                    
-    problem.config.daily_hours = new_daily_hours
+            val = st.number_input(
+                label=f"**{DAYS_OF_WEEK[d_i]}**",
+                min_value=1,
+                max_value=9,
+                value=int(new_daily_hours[d_i]),
+                step=1,
+                key=f"dh_num_input_{d_i}",
+                help=f"Ore di lezione di {DAYS_OF_WEEK[d_i]}"
+            )
+            updated_hours.append(int(val))
+            if int(val) != new_daily_hours[d_i]:
+                has_changed = True
+
+    if has_changed:
+        problem.config.daily_hours = updated_hours
+        st.session_state.result = None
+        st.rerun()
     # -------------------------------------------------------------
     # SELEZIONE SECONDA LINGUA COMUNITARIA (2 ORE SETTIMANALI)
     # -------------------------------------------------------------
@@ -2293,112 +2602,9 @@ with tabs[0]:
 with tabs[1]:
     st.header("👥 Docenti & Desiderata Personali")
     
-    # -------------------------------------------------------------
-    # RACCOLTA DESIDERATA DOCENTI (SELF-SERVICE & CARICAMENTO)
-    # -------------------------------------------------------------
-    with st.expander("📋 Raccolta Desiderata Docenti (Modulo Condivisibile & Upload Multi-Docente)", expanded=True):
-        st.caption("Permette ai docenti di compilare autonomamente i propri desiderata (giorni liberi, preferenze orarie, L.104/COE) e all'amministratore di importarli tutti con 1 click senza intaccare le cattedre e le classi già configurate.")
+    if st.session_state.get("teacher_save_success"):
+        st.success(st.session_state.pop("teacher_save_success"))
 
-        c_des1, c_des2 = st.columns([1, 1])
-        with c_des1:
-            st.markdown("##### 1. Distribuisci il Modulo ai Docenti")
-            st.write("Scarica il foglio Excel personalizzato con l'elenco dei docenti della scuola da inviare via email / chat o caricare su Google Drive / Microsoft Forms:")
-            st.download_button(
-                "📥 Scarica Modulo Raccolta Desiderata (.xlsx)",
-                data=generate_teacher_desiderata_form(problem),
-                file_name=f"Modulo_Raccolta_Desiderata_{problem.config.school_name.replace(' ', '_')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="btn_dl_desiderata_form",
-                use_container_width=True,
-                help="Genera un file Excel elegante con i campi compilabili dai singoli docenti o dall'intero collegio."
-            )
-
-        with c_des2:
-            st.markdown("##### 2. Carica i Moduli Compilati")
-            st.write("Carica il file unico o seleziona contemporaneamente i file inviati dai singoli docenti:")
-            up_des_files = st.file_uploader(
-                "📂 Carica Modulo/i Desiderata Compilati (.xlsx o .csv)",
-                type=["xlsx", "csv"],
-                accept_multiple_files=True,
-                key="up_desiderata_multi"
-            )
-            if up_des_files:
-                tot_updated = 0
-                all_logs = []
-                for f in up_des_files:
-                    try:
-                        num_up, f_logs = merge_teacher_desiderata_file(f.getvalue(), problem, filename=f.name)
-                        tot_updated += num_up
-                        all_logs.extend(f_logs)
-                    except Exception as e:
-                        st.error(f"Errore su {f.name}: {e}")
-                if tot_updated > 0:
-                    st.success(f"🎉 Aggiornati con successo i desiderata personali di **{tot_updated} docenti** senza toccare le cattedre!")
-                    st.session_state.result = None
-                    with st.expander("📋 Dettagli aggiornamento docenti"):
-                        for msg in all_logs:
-                            st.write(msg)
-                    st.rerun()
-
-    with st.expander("📥 Importa / Esporta Intero Database Scuola (Docenti + Cattedre Complete)", expanded=False):
-        c_t_csv1, c_t_csv2 = st.columns(2)
-        with c_t_csv1:
-            st.download_button(
-                "📊 Scarica Modello Excel (.xlsx) Vuoto",
-                data=generate_excel_template(),
-                file_name="Template_Orario_Docenti_Vuoto.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="tab2_dl_empty_xlsx",
-                use_container_width=True,
-                help="Scarica il file Excel vuoto formattato per compilare docenti e cattedre."
-            )
-            st.download_button(
-                "📄 Scarica Modello CSV Vuoto",
-                data=generate_csv_template().encode('utf-8-sig'),
-                file_name="Template_Orario_Docenti_Vuoto.csv",
-                mime="text/csv",
-                key="tab2_dl_empty_csv",
-                use_container_width=True,
-                help="Scarica il file CSV vuoto da compilare su Excel o Calc."
-            )
-        with c_t_csv2:
-            st.download_button(
-                "📊 Esporta Docenti Attuali in Excel (.xlsx)",
-                data=generate_excel_template(problem),
-                file_name=f"Docenti_{problem.config.school_name.replace(' ', '_')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="tab2_dl_sample_xlsx",
-                use_container_width=True,
-                help="Esporta tutti i docenti e i desiderata attuali in formato Excel."
-            )
-            st.download_button(
-                "📄 Esporta Docenti Attuali in CSV",
-                data=generate_csv_template(problem).encode('utf-8-sig'),
-                file_name=f"Docenti_Desiderata_{problem.config.school_name.replace(' ', '_')}.csv",
-                mime="text/csv",
-                key="tab2_dl_sample_csv",
-                use_container_width=True,
-                help="Esporta tutti i docenti e i desiderata attuali in CSV per Excel."
-            )
-        up_t_file = st.file_uploader("📂 Carica File Compilato (.xlsx o .csv)", type=["xlsx", "csv"], key="tab2_file_up")
-        if up_t_file is not None:
-            try:
-                fname = up_t_file.name.lower()
-                if fname.endswith(".xlsx"):
-                    parsed_prob, logs = parse_excel_timetable(up_t_file.getvalue(), problem.config)
-                else:
-                    content_str = up_t_file.getvalue().decode('utf-8-sig', errors='replace')
-                    parsed_prob, logs = parse_csv_timetable(content_str, problem.config)
-                st.session_state.problem = parsed_prob
-                st.session_state.result = None
-                st.success("✅ Dati importati con successo!")
-                for log_msg in logs:
-                    st.info(log_msg)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Errore durante l'elaborazione del file: {e}")
-
-    
     is_settimana_corta = (problem.config.num_days == 5)
     if is_settimana_corta:
         st.info("📌 **Regola Settimana Corta (5 Giorni)**: Il sabato è già giorno di chiusura dell'istituto. I docenti a **tempo pieno** lavorano su tutti i 5 giorni feriali. Il **giorno libero infrasettimanale** è selezionabile solo per i docenti in **Part-time / Orario ridotto**.")
@@ -2596,9 +2802,23 @@ with tabs[1]:
                 desiderata_tags.append(f"🟡 {soft_count} slot")
             desiderata_str = ", ".join(desiderata_tags) if desiderata_tags else "Standard"
     
-            assigned_classes_names = sorted(list(set(problem.classes[a.class_id].name if a.class_id in problem.classes else a.class_id for a in t_assigns)))
-            tot_h_assigned = sum(a.hours_per_week for a in t_assigns)
-            classes_txt = f"📚 *Classi: {', '.join(assigned_classes_names)} ({tot_h_assigned}h)*" if assigned_classes_names else "📚 *Nessuna classe assegnata*"
+            is_sos = (
+                "sostegno" in t.name.lower() 
+                or "sostegno" in getattr(t, "cdc", "").lower() 
+                or "admm" in getattr(t, "cdc", "").lower()
+                or bool(getattr(t, "preferred_areas", []))
+            )
+            if is_sos:
+                p_areas = getattr(t, "preferred_areas", [])
+                if p_areas:
+                    area_badges = [DISCIPLINARY_AREAS[k]["label"] for k in p_areas if k in DISCIPLINARY_AREAS]
+                    classes_txt = f"🎯 *Aree preferite: {', '.join(area_badges)}*"
+                else:
+                    classes_txt = "🎯 *Aree preferite: Tutte le discipline (generale)*"
+            else:
+                assigned_classes_names = sorted(list(set(problem.classes[a.class_id].name if a.class_id in problem.classes else a.class_id for a in t_assigns)))
+                tot_h_assigned = sum(a.hours_per_week for a in t_assigns)
+                classes_txt = f"📚 *Classi: {', '.join(assigned_classes_names)} ({tot_h_assigned}h)*" if assigned_classes_names else "📚 *Nessuna classe assegnata*"
             t_subjs_str = get_teacher_subjects_display(t, problem)
             pt_badge = " ⏱️ `[PART-TIME]`" if is_pt else ""
     
@@ -2621,9 +2841,9 @@ with tabs[1]:
                         st.session_state.editing_teacher_id = None
                     else:
                         st.session_state.editing_teacher_id = tid
-                        # Rimuovi vecchi stati temporanei per caricare i dati attuali del docente
+                        # Rimuovi TUTTI i vecchi stati temporanei e widget per questo docente
                         for k in list(st.session_state.keys()):
-                            if k.startswith(f"teacher_temp_assigns_{tid}") or k.startswith("t_temp_dbl_"):
+                            if k.endswith(f"_{tid}") or f"_{tid}_" in k or k.startswith(f"teacher_temp_assigns_{tid}"):
                                 del st.session_state[k]
                     st.rerun()
             with row_cols[5]:
@@ -3204,9 +3424,15 @@ with tabs[2]:
             st.info("Aggiungi prima almeno una classe per poterne definire il consiglio di classe e le materie.")
     
     # =============================================================
-# TAB 4: CATTEDRE & DESIDERATA DIDATTICI
+# TAB 4: SOSTEGNO, DVA & POTENZIAMENTO
 # =============================================================
 with tabs[3]:
+    render_support_management_tab(problem)
+
+# =============================================================
+# TAB 5: CATTEDRE & DESIDERATA DIDATTICI
+# =============================================================
+with tabs[4]:
     st.header("📚 Assegnazione Cattedre & Desiderata Didattici")
     st.write("Definisci quali docenti insegnano nelle classi e configura le **regole didattiche** (ore doppie, max ore al giorno).")
 
@@ -3252,21 +3478,28 @@ with tabs[3]:
             )
         up_c_file = st.file_uploader("📂 Carica File Cattedre (.xlsx o .csv)", type=["xlsx", "csv"], key="tab4_file_up")
         if up_c_file is not None:
-            try:
-                fname = up_c_file.name.lower()
-                if fname.endswith(".xlsx"):
-                    parsed_prob, logs = parse_excel_timetable(up_c_file.getvalue(), problem.config)
-                else:
-                    content_str = up_c_file.getvalue().decode('utf-8-sig', errors='replace')
-                    parsed_prob, logs = parse_csv_timetable(content_str, problem.config)
-                st.session_state.problem = parsed_prob
-                st.session_state.result = None
-                st.success("✅ Cattedre e dati didattici importati con successo!")
-                for log_msg in logs:
-                    st.info(log_msg)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Errore durante l'elaborazione del file: {e}")
+            c_sig = f"{up_c_file.name}_{up_c_file.size}"
+            if st.session_state.get("processed_tab4_file") != c_sig:
+                try:
+                    fname = up_c_file.name.lower()
+                    if fname.endswith(".xlsx"):
+                        parsed_prob, logs = parse_excel_timetable(up_c_file.getvalue(), problem.config)
+                    else:
+                        content_str = up_c_file.getvalue().decode('utf-8-sig', errors='replace')
+                        parsed_prob, logs = parse_csv_timetable(content_str, problem.config)
+                    st.session_state["problem"] = parsed_prob
+                    st.session_state["result"] = None
+                    st.session_state["data_version"] = st.session_state.get("data_version", 0) + 1
+                    st.session_state["processed_tab4_file"] = c_sig
+                    st.session_state["tab4_upload_logs"] = logs
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore durante l'elaborazione del file: {e}")
+
+        if st.session_state.get("tab4_upload_logs"):
+            st.success("✅ Cattedre e dati didattici importati con successo!")
+            for log_msg in st.session_state["tab4_upload_logs"]:
+                st.info(log_msg)
 
     if "editing_assign_idx" not in st.session_state:
         st.session_state.editing_assign_idx = None
@@ -3364,11 +3597,20 @@ with tabs[3]:
     teacher_hours_summary = []
     for t_id, t in problem.teachers.items():
         t_assigns = [a for a in problem.assignments if a.teacher_id == t_id or t_id in a.co_teacher_ids]
-        tot_assigned = sum(a.hours_per_week for a in t_assigns)
+        t_sup = [sa for sa in getattr(problem, "support_assignments", []) if sa.teacher_id == t_id]
+        t_enh = [ea for ea in getattr(problem, "enhancement_assignments", []) if ea.teacher_id == t_id]
+        
+        tot_assigned = sum(a.hours_per_week for a in t_assigns) + sum(sa.hours_per_week for sa in t_sup) + sum(ea.hours_per_week for ea in t_enh)
         
         is_pt = getattr(t, "is_part_time", False)
         target_h = getattr(t, "contract_hours", None) or (9 if is_pt else 18)
         
+        role_tag = ""
+        if t_sup or "sostegno" in getattr(t, "cdc", "").lower() or "admm" in getattr(t, "cdc", "").lower():
+            role_tag = " [Sostegno]"
+        elif t_enh or "potenziamento" in getattr(t, "cdc", "").lower():
+            role_tag = " [Potenziamento]"
+            
         if tot_assigned == target_h:
             status_txt = f"✅ Completa ({tot_assigned}/{target_h}h)"
         elif tot_assigned < target_h:
@@ -3380,9 +3622,10 @@ with tabs[3]:
             status_txt = f"❌ Sovraccarico ({tot_assigned}/{target_h}h: +{diff}h)"
             unbalanced_teachers.append((t.name, tot_assigned, target_h, diff))
 
+        contratto_label = f"Part-Time (max {getattr(t, 'max_working_days', 3)} gg)" if is_pt else "Tempo Pieno (18h)"
         teacher_hours_summary.append({
             "Docente": t.name,
-            "Contratto": f"Part-Time (max {getattr(t, 'max_working_days', 3)} gg)" if is_pt else "Tempo Pieno (18h)",
+            "Contratto": contratto_label + role_tag,
             "Ore Assegnate": f"{tot_assigned} ore",
             "Target Contrattuale": f"{target_h} ore",
             "Stato Cattedra": status_txt
@@ -3772,16 +4015,20 @@ with tabs[3]:
                 st.rerun()
 
 # =============================================================
-# TAB 5: GENERA ORARIO
+# TAB 6: GENERA ORARIO
 # =============================================================
-with tabs[4]:
+with tabs[5]:
     st.header("🚀 Generazione Automatica dell'Orario Scolastico")
     st.write(f"Solutore attivo per: **{problem.config.school_name}** ({'Modello DADA' if problem.config.is_dada else 'Modello Tradizionale'}).")
 
     # Controllo quadratura preventivo
     t_unbal = []
     for t_id, t in problem.teachers.items():
-        tot_a = sum(a.hours_per_week for a in problem.assignments if a.teacher_id == t_id)
+        tot_a = (
+            sum(a.hours_per_week for a in problem.assignments if a.teacher_id == t_id) +
+            sum(sa.hours_per_week for sa in getattr(problem, "support_assignments", []) if sa.teacher_id == t_id) +
+            sum(ea.hours_per_week for ea in getattr(problem, "enhancement_assignments", []) if ea.teacher_id == t_id)
+        )
         target = getattr(t, "contract_hours", None) or (9 if getattr(t, "is_part_time", False) else 18)
         if tot_a != target:
             t_unbal.append((t.name, tot_a, target))
@@ -4032,7 +4279,7 @@ with tabs[4]:
                 
                 render_room_bottlenecks_resolver(problem, key_suffix="tab5_fail")
 
-    res: Optional[TimetableResult] = st.session_state.result
+    res: Optional[TimetableResult] = st.session_state.get("result")
     if res and res.status in ["OPTIMAL", "FEASIBLE"]:
         st.divider()
         st.subheader("📊 Metriche di Qualità & Desiderata Soddisfatti")
@@ -4178,6 +4425,9 @@ with tabs[4]:
         st.caption("Verifica punto per punto quali desiderata (giorno libero, orari di ingresso/uscita, ore buche, blocchi doppi) sono stati accolti per ciascun insegnante.")
 
         t_reports = getattr(res, "teacher_reports", {})
+        # Escludi i docenti di solo sostegno/potenziamento dal report curricolare classico
+        curricular_t_ids = {a.teacher_id for a in problem.assignments}
+        t_reports = {t_id: rep for t_id, rep in t_reports.items() if t_id in curricular_t_ids}
         if t_reports:
             # Filtri veloci
             f_col1, f_col2 = st.columns([2, 1])
@@ -4261,32 +4511,61 @@ with tabs[4]:
                         st.markdown(f"**Blocchi 2 Ore**: {rep['double_hours_result']}")
                         st.markdown(f"**Punteggio**: `{rep['score_percent']}%`")
 
+        # -------------------------------------------------------------
+        # SEZIONE RITOCCHI MANUALI, SMART REPAIR & UPLOAD EXCEL
+        # -------------------------------------------------------------
+        st.divider()
+        render_manual_editor_and_import_panel(problem)
+
+        # -------------------------------------------------------------
+        # SEZIONE GENERATORE SOSTEGNO & POTENZIAMENTO
+        # -------------------------------------------------------------
+        st.divider()
+        render_support_solver_section(problem, st.session_state.get("result", res))
+
 # =============================================================
-# TAB 6: VISUALIZZA & ESPORTA
+# TAB 7: VISUALIZZA & ESPORTA
 # =============================================================
-with tabs[5]:
+with tabs[6]:
     st.header("📅 Visualizzazione e Download dell'Orario")
     
-    res: Optional[TimetableResult] = st.session_state.result
-    if not res or res.status not in ["OPTIMAL", "FEASIBLE"]:
-        st.info("Nessun orario calcolato al momento. Vai nella scheda '🚀 Genera Orario' e avvia il calcolo!")
+    res: Optional[TimetableResult] = st.session_state.get("result")
+    if not res or res.status not in ["OPTIMAL", "FEASIBLE", "IMPORTED"]:
+        st.info("Nessun orario calcolato o importato al momento. Vai nella scheda '🚀 Genera Orario' per avviare il calcolo o caricare un file Excel!")
     else:
         st.markdown("##### 📥 Esportazione Documenti Ufficiali (Excel & PDF Alta Definizione)")
         st.caption("Scarica i prospetti orari completi in formato Excel modificabile o in eleganti PDF A4 Orizzontali pronti per la stampa (1 griglia per pagina).")
         
-        down_c1, down_c2, down_c3, down_c4 = st.columns(4)
-        with down_c1:
-            excel_bytes = generate_excel_timetable(problem, res)
+        sup_res_obj = st.session_state.get("support_result")
+        
+        # 1. ESPORTAZIONI EXCEL
+        st.markdown("##### 📊 Esportazioni Excel (.xlsx)")
+        ex_col1, ex_col2 = st.columns(2)
+        with ex_col1:
+            tabellone_excel_bytes = generate_excel_tabellone_combo(problem, res, support_result=sup_res_obj)
             st.download_button(
-                label="📊 Scarica Tutto in Excel (.xlsx)",
-                data=excel_bytes,
-                file_name=f"Orario_{problem.config.school_name.replace(' ', '_')}.xlsx",
+                label="📊 Scarica Tabellone Generale Excel (Combo Curricolare + Sostegno - 1 riga/docente)",
+                data=tabellone_excel_bytes,
+                file_name=f"Tabellone_Docenti_Combo_{problem.config.school_name.replace(' ', '_')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 type="primary",
                 use_container_width=True
             )
-            
-        with down_c2:
+        with ex_col2:
+            excel_bytes = generate_excel_timetable(problem, res, support_result=sup_res_obj)
+            st.download_button(
+                label="📑 Scarica Cartella Excel Completa (Tutti i Fogli: Classi, Docenti, Aule, Sostegno)",
+                data=excel_bytes,
+                file_name=f"Orario_Completo_{problem.config.school_name.replace(' ', '_')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+        # 2. ESPORTAZIONI PDF
+        st.write("")
+        st.markdown("##### 📄 Esportazioni PDF Alta Definizione (A4 Orizzontale - 1 griglia per pagina)")
+        pdf_c1, pdf_c2, pdf_c3 = st.columns(3)
+        with pdf_c1:
             if st.button("📄 Genera PDF Classi", use_container_width=True, key="btn_prep_pdf_classes"):
                 with st.spinner("Rendering PDF Classi (1 per foglio)..."):
                     st.session_state.pdf_classes_bytes = generate_classes_pdf(problem, res)
@@ -4298,9 +4577,8 @@ with tabs[5]:
                     mime="application/pdf",
                     use_container_width=True
                 )
-                
-        with down_c3:
-            if st.button("📄 Genera PDF Docenti", use_container_width=True, key="btn_prep_pdf_teachers"):
+        with pdf_c2:
+            if st.button("📄 Genera PDF Docenti Curricolari", use_container_width=True, key="btn_prep_pdf_teachers"):
                 with st.spinner("Rendering PDF Docenti (1 per foglio)..."):
                     st.session_state.pdf_teachers_bytes = generate_teachers_pdf(problem, res)
             if "pdf_teachers_bytes" in st.session_state and st.session_state.pdf_teachers_bytes:
@@ -4311,8 +4589,7 @@ with tabs[5]:
                     mime="application/pdf",
                     use_container_width=True
                 )
-                
-        with down_c4:
+        with pdf_c3:
             if problem.rooms:
                 if st.button("📄 Genera PDF Aule / DADA", use_container_width=True, key="btn_prep_pdf_rooms"):
                     with st.spinner("Rendering PDF Aule (1 per foglio)..."):
@@ -4327,12 +4604,43 @@ with tabs[5]:
                     )
             else:
                 st.info("Nessuna aula DADA configurata.")
+                
+        # 3. Seconda riga export dedicata al Sostegno & Inclusione
+        if sup_res_obj and sup_res_obj.status in ["OPTIMAL", "FEASIBLE"]:
+            st.write("")
+            st.markdown("##### ♿ Esportazioni PDF Sostegno & Inclusione Integrata")
+            sdown_c1, sdown_c2 = st.columns(2)
+            with sdown_c1:
+                if st.button("♿ Genera PDF Docenti di Sostegno (1 per foglio)", use_container_width=True, key="btn_prep_pdf_sup_t"):
+                    with st.spinner("Rendering PDF Docenti Sostegno..."):
+                        st.session_state.pdf_sup_teachers_bytes = generate_support_teachers_pdf(problem, res, sup_res_obj)
+                if "pdf_sup_teachers_bytes" in st.session_state and st.session_state.pdf_sup_teachers_bytes:
+                    st.download_button(
+                        label="⬇️ Scarica PDF Docenti Sostegno (.pdf)",
+                        data=st.session_state.pdf_sup_teachers_bytes,
+                        file_name=f"Orario_Docenti_Sostegno_{problem.config.school_name.replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+            with sdown_c2:
+                if st.button("🏫 Genera PDF Classi con Sostegni & Compresenze (1 per foglio)", use_container_width=True, key="btn_prep_pdf_cls_sup"):
+                    with st.spinner("Rendering PDF Classi con Sostegni..."):
+                        st.session_state.pdf_cls_sup_bytes = generate_classes_with_support_pdf(problem, res, sup_res_obj)
+                if "pdf_cls_sup_bytes" in st.session_state and st.session_state.pdf_cls_sup_bytes:
+                    st.download_button(
+                        label="⬇️ Scarica PDF Classi con Sostegni (.pdf)",
+                        data=st.session_state.pdf_cls_sup_bytes,
+                        file_name=f"Orario_Classi_con_Sostegni_{problem.config.school_name.replace(' ', '_')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
         
         st.divider()
         
         view_options = ["📊 Tabellone Generale Docenti", "Per Docente (Singolo)", "Per Classe"]
         if problem.rooms:
             view_options.append("Per Aula / DADA")
+        view_options.append("🤝 Sostegno, DVA & Potenziamento")
             
         view_mode = st.radio("Modalità di Visualizzazione:", view_options, horizontal=True)
         
@@ -4341,66 +4649,118 @@ with tabs[5]:
         max_h = max(daily_hours)
 
         if view_mode == "📊 Tabellone Generale Docenti":
-            st.subheader("📊 Tabellone Generale Docenti (Tutti i Docenti su Riga)")
-            st.caption("Visualizzazione compatta: ogni riga rappresenta un docente con l'indicazione di classe, disciplina, eventuale aula/palestra e compresenze.")
+            st.subheader("📊 Tabellone Generale Docenti (1 Riga per Docente)")
+            st.caption("Visualizzazione orizzontale compatta: ogni riga rappresenta un docente con classe, disciplina, eventuale aula e compresenze / sostegno.")
+            
+            inc_sup_tab = st.checkbox("👥 Includi Docenti di Sostegno / Potenziamento nel Tabellone Generale", value=True, key="chk_inc_sup_tabellone")
             
             tabellone_rows = []
             for t_id, teacher in problem.teachers.items():
                 t_assignments = [a for a in problem.assignments if a.teacher_id == t_id or t_id in a.co_teacher_ids]
-                tot_hours = sum(a.hours_per_week for a in t_assignments)
-                is_pt = getattr(teacher, "is_part_time", False)
+                tot_cur_h = sum(a.hours_per_week for a in t_assignments)
+                
+                t_sup_assigns = [sa for sa in problem.support_assignments if sa.teacher_id == t_id]
+                t_pot_assigns = [ea for ea in problem.enhancement_assignments if ea.teacher_id == t_id]
+                tot_sup_h = sum(sa.hours_per_week for sa in t_sup_assigns) + sum(ea.hours_per_week for ea in t_pot_assigns)
+                
+                is_sup_t = tot_sup_h > 0 or "sostegno" in teacher.name.lower()
+                
+                if tot_cur_h == 0 and not (inc_sup_tab and is_sup_t and tot_sup_h > 0):
+                    continue
+                    
+                tot_h = tot_cur_h + (tot_sup_h if inc_sup_tab else 0)
+                is_pt = getattr(teacher, "is_part_time", False) or tot_h < 15
                 max_w = getattr(teacher, "max_working_days", None)
-                contratto_txt = f"PT (max {max_w} gg)" if (is_pt and max_w) else ("Part-Time" if is_pt else "Tempo Pieno")
+                
+                if is_sup_t:
+                    contratto_txt = f"Sostegno PT ({tot_h}h)" if is_pt else "Sostegno (18h)"
+                else:
+                    contratto_txt = f"PT (max {max_w} gg)" if (is_pt and max_w) else ("Part-Time" if is_pt else "Tempo Pieno")
                 
                 row_dict = {
                     "Docente": teacher.name,
-                    "Contratto": contratto_txt,
-                    "Tot Ore": tot_hours
+                    "Contratto / Ruolo": contratto_txt,
+                    "Tot Ore": tot_h
                 }
 
-                day_has_lessons = [False] * problem.config.num_days
-                for d_idx in range(problem.config.num_days):
-                    for h in range(daily_hours[d_idx]):
-                        if t_id in res.grid_by_teacher and res.grid_by_teacher[t_id][d_idx][h] is not None:
-                            day_has_lessons[d_idx] = True
-                            break
+                if not is_sup_t:
+                    day_has_lessons = [False] * problem.config.num_days
+                    for d_idx in range(problem.config.num_days):
+                        for h in range(daily_hours[d_idx]):
+                            if t_id in res.grid_by_teacher and res.grid_by_teacher[t_id][d_idx][h] is not None:
+                                day_has_lessons[d_idx] = True
+                                break
 
-                for d_idx, day_name in enumerate(days_active):
-                    is_day_free = not day_has_lessons[d_idx]
-                    
-                    first_l = None
-                    last_l = None
-                    if not is_day_free:
-                        lessons_in_day = [res.grid_by_teacher[t_id][d_idx][hh] is not None for hh in range(daily_hours[d_idx])]
-                        first_l = next((idx for idx, val in enumerate(lessons_in_day) if val), None)
-                        last_l = next((idx for idx in reversed(range(len(lessons_in_day))) if lessons_in_day[idx]), None)
+                    for d_idx, day_name in enumerate(days_active):
+                        is_day_free = not day_has_lessons[d_idx]
+                        lessons_in_day = [res.grid_by_teacher[t_id][d_idx][hh] is not None for hh in range(daily_hours[d_idx])] if (t_id in res.grid_by_teacher and not is_day_free) else []
+                        first_l = next((idx for idx, val in enumerate(lessons_in_day) if val), None) if lessons_in_day else None
+                        last_l = next((idx for idx in reversed(range(len(lessons_in_day))) if lessons_in_day[idx]), None) if lessons_in_day else None
 
-                    for h in range(daily_hours[d_idx]):
-                        col_key = f"{day_name[:3]} {h+1}ª"
-                        if is_day_free:
-                            row_dict[col_key] = "🟢 LIB"
-                        else:
-                            slot_info = res.grid_by_teacher.get(t_id, [])[d_idx][h] if t_id in res.grid_by_teacher else None
-                            if slot_info:
-                                clean_r = slot_info.room_name.split("(")[0].strip().replace("ª", "") if getattr(slot_info, "room_name", None) else ""
-                                room_tag = f" [{clean_r[:6]}]" if clean_r else ""
-                                c_flag = " 👥" if (getattr(slot_info, "is_compresenza", False) or getattr(slot_info, "compresenza_text", "")) else ""
-                                row_dict[col_key] = f"{slot_info.class_name} ({slot_info.subject_name[:4]}){room_tag}{c_flag}"
+                        for h in range(daily_hours[d_idx]):
+                            col_key = f"{day_name[:3]} {h+1}ª"
+                            if is_day_free:
+                                row_dict[col_key] = "🟢 LIB"
                             else:
-                                if first_l is not None and last_l is not None and first_l < h < last_l:
-                                    row_dict[col_key] = "🟠 BUCA"
+                                slot_info = res.grid_by_teacher.get(t_id, [])[d_idx][h] if t_id in res.grid_by_teacher else None
+                                if slot_info:
+                                    clean_c = slot_info.class_name.replace("ª", "").replace(" ", "") if slot_info.class_name else ""
+                                    clean_s = slot_info.subject_name.split("(")[0].strip()[:4] if slot_info.subject_name else ""
+                                    clean_r = slot_info.room_name.split("(")[0].strip().replace("ª", "").replace("  ", " ") if getattr(slot_info, "room_name", None) else ""
+                                    room_tag = f" [{clean_r}]" if clean_r else ""
+                                    c_flag = " 👥" if (getattr(slot_info, "is_compresenza", False) or getattr(slot_info, "compresenza_text", "")) else ""
+                                    row_dict[col_key] = f"{clean_c} ({clean_s}){room_tag}{c_flag}"
                                 else:
-                                    row_dict[col_key] = "-"
+                                    if first_l is not None and last_l is not None and first_l < h < last_l:
+                                        row_dict[col_key] = "🟠 BUCA"
+                                    else:
+                                        row_dict[col_key] = "-"
+                else:
+                    # Riferimento alla griglia di sostegno
+                    sup_g = sup_res_obj.grid_by_support_teacher.get(t_id, []) if sup_res_obj else []
+                    day_has_lessons = [False] * problem.config.num_days
+                    for d_idx in range(problem.config.num_days):
+                        for h in range(daily_hours[d_idx]):
+                            if d_idx < len(sup_g) and h < len(sup_g[d_idx]) and sup_g[d_idx][h]:
+                                day_has_lessons[d_idx] = True
+                                break
+
+                    for d_idx, day_name in enumerate(days_active):
+                        is_day_free = not day_has_lessons[d_idx]
+                        lessons_in_day = [bool(sup_g[d_idx][hh]) for hh in range(daily_hours[d_idx])] if (d_idx < len(sup_g) and not is_day_free) else []
+                        first_l = next((idx for idx, val in enumerate(lessons_in_day) if val), None) if lessons_in_day else None
+                        last_l = next((idx for idx in reversed(range(len(lessons_in_day))) if lessons_in_day[idx]), None) if lessons_in_day else None
+
+                        for h in range(daily_hours[d_idx]):
+                            col_key = f"{day_name[:3]} {h+1}ª"
+                            if is_day_free:
+                                row_dict[col_key] = "🟢 LIB"
+                            else:
+                                slots = sup_g[d_idx][h] if (d_idx < len(sup_g) and h < len(sup_g[d_idx])) else []
+                                if slots:
+                                    sl = slots[0]
+                                    clean_c = sl.class_name.replace("ª", "").replace(" ", "") if sl.class_name else ""
+                                    clean_stud = sl.student_name.replace("Alunno ", "")[:8] if sl.student_name else (sl.activity_type.upper() if sl.is_enhancement else "Sost.")
+                                    cur_s = sl.curricular_subject_name[:4] if sl.curricular_subject_name else ""
+                                    clean_r = sl.room_name.split("(")[0].strip().replace("ª", "").replace("  ", " ") if getattr(sl, "room_name", None) else ""
+                                    room_tag = f" [{clean_r}]" if clean_r else ""
+                                    row_dict[col_key] = f"♿ {clean_c} ({clean_stud}){room_tag} [{cur_s}]"
+                                else:
+                                    if first_l is not None and last_l is not None and first_l < h < last_l:
+                                        row_dict[col_key] = "🟠 BUCA"
+                                    else:
+                                        row_dict[col_key] = "-"
 
                 tabellone_rows.append(row_dict)
 
             st.dataframe(pd.DataFrame(tabellone_rows), use_container_width=True, hide_index=True)
 
         elif view_mode == "Per Classe":
-            sel_c = st.selectbox("Seleziona Classe:", list(problem.classes.keys()), format_func=lambda x: problem.classes[x].name)
+            sel_c = st.selectbox("Seleziona Classe:", list(problem.classes.keys()), format_func=lambda x: problem.classes[x].name.replace("ª", "").replace(" ", ""))
             
             if sel_c and sel_c in res.grid_by_class:
-                st.subheader(f"📅 Orario Settimanale - Classe {problem.classes[sel_c].name}")
+                clean_sel_c = problem.classes[sel_c].name.replace("ª", "").replace(" ", "")
+                st.subheader(f"📅 Orario Settimanale - Classe {clean_sel_c}")
                 grid_html = render_html_schedule_table(days_active, daily_hours, res.grid_by_class[sel_c], view_type="class")
                 if hasattr(st, "html"):
                     st.html(grid_html)
@@ -4408,7 +4768,8 @@ with tabs[5]:
                     st.markdown(grid_html, unsafe_allow_html=True)
 
         elif view_mode == "Per Docente (Singolo)":
-            sel_t = st.selectbox("Seleziona Docente:", list(problem.teachers.keys()), format_func=lambda x: problem.teachers[x].name)
+            curricular_teachers = [t_id for t_id in problem.teachers.keys() if any(a.teacher_id == t_id or t_id in a.co_teacher_ids for a in problem.assignments)]
+            sel_t = st.selectbox("Seleziona Docente Curricolare:", curricular_teachers, format_func=lambda x: problem.teachers[x].name)
             
             if sel_t and sel_t in res.grid_by_teacher:
                 teacher = problem.teachers[sel_t]
@@ -4444,3 +4805,6 @@ with tabs[5]:
                     st.html(grid_html)
                 else:
                     st.markdown(grid_html, unsafe_allow_html=True)
+
+        elif view_mode == "🤝 Sostegno, DVA & Potenziamento":
+            render_support_timetables_view(problem, res, st.session_state.get("support_result"))

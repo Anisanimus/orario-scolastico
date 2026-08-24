@@ -9,21 +9,79 @@ Monte ore e cattedre perfette al 100%:
 from typing import Dict, List, Optional, Tuple
 from models import (
     SchoolConfig, Teacher, SchoolClass, Subject, Classroom, 
-    TeachingAssignment, TimetableProblem, DAYS_OF_WEEK
+    TeachingAssignment, TimetableProblem, DAYS_OF_WEEK,
+    StudentDVA, SupportAssignment, EnhancementAssignment
 )
 
-# Pool di cognomi realistici per docenti italiani
+# Docenti ufficiali assegnati agli spazi DADA della scuola (Nomi di Fantasia)
+OFFICIAL_TEACHERS_BY_CDC = {
+    "let": [
+        ("doc_let_1", "Prof. Valenti S.", "A-22"),
+        ("doc_let_2", "Prof.ssa Montanari G.", "A-22"),
+        ("doc_let_3", "Prof. De Angelis S.", "A-22"),
+        ("doc_let_4", "Prof.ssa Rinaldi B.", "A-22"),
+        ("doc_let_5", "Prof. Silvestri M.", "A-22"),
+        ("doc_let_6", "Prof.ssa Lombardi S.", "A-22"),
+        ("doc_let_7", "Prof.ssa Costantini B.", "A-22"),
+        ("doc_let_8", "Prof. Barbieri E.", "A-22"),
+        ("doc_let_9", "Prof.ssa Ferri F.", "A-22"),
+        ("doc_let_10", "Prof. Pellegrino D.", "A-22"),
+        ("doc_let_11", "Prof. Damico S.", "A-22"),
+    ],
+    "mat": [
+        ("doc_mat_1", "Prof. Marchetti E.", "A-28"),
+        ("doc_mat_2", "Prof. Serra G.", "A-28"),
+        ("doc_mat_3", "Prof. Galli S.", "A-28"),
+        ("doc_mat_4", "Prof. Donati E.", "A-28"),
+        ("doc_mat_5", "Prof. Bernardi B.", "A-28"),
+        ("doc_mat_6", "Prof. Fontana R.", "A-28"),
+        ("doc_mat_7", "Prof.ssa Villa E.", "A-28"),
+    ],
+    "tec": [
+        ("doc_tec_1", "Prof. Vitali R.", "A-60"),
+        ("doc_tec_2", "Prof. Mariani A.", "A-60"),
+    ],
+    "ing": [
+        ("doc_ing_1", "Prof. Sartori S.", "A-24"),
+        ("doc_ing_2", "Prof.ssa Colombo E.", "A-24"),
+        ("doc_ing_3", "Prof. Caruso F.", "A-24"),
+    ],
+    "spa": [
+        ("doc_spa_1", "Prof. Moretti A.", "A-24"),
+        ("doc_spa_2", "Prof. Battaglia R.", "A-24"),
+    ],
+    "art": [
+        ("doc_art_1", "Prof. Grassi F.", "A-01"),
+        ("doc_art_2", "Prof.ssa Fiore E.", "A-01"),
+        ("doc_art_3", "Prof. Pagano I.", "A-01"),
+    ],
+    "mus": [
+        ("doc_mus_1", "Prof. Bellini A.", "A-30"),
+        ("doc_mus_2", "Prof. Gentile G.", "A-30"),
+    ],
+    "mot": [
+        ("doc_mot_1", "Prof.ssa Rossetti M.", "A-48"),
+        ("doc_mot_2", "Prof.ssa Leone P.", "A-48"),
+        ("doc_mot_3", "Prof. Valentini S.", "A-48"),
+        ("doc_mot_4", "Prof. Parisi D.", "A-48"),
+    ],
+    "rel": [
+        ("doc_rel_1", "Prof. De Rosa P.", "Religione"),
+    ],
+}
+
+def get_official_teacher_meta(subj_code: str, idx: int) -> Tuple[str, str, str]:
+    pool = OFFICIAL_TEACHERS_BY_CDC.get(subj_code, [])
+    if 1 <= idx <= len(pool):
+        return pool[idx - 1]
+    return f"doc_{subj_code}_{idx}", f"Prof. Docente {subj_code.upper()} {idx}", pool[0][2] if pool else "Docente"
+
+# Pool di cognomi realistici di riserva
 TEACHER_NAMES = [
     "Prof.ssa Bianchi", "Prof. Romano", "Prof.ssa Marino", "Prof. Verdi",
     "Prof.ssa Ferrari", "Prof.ssa Rossi", "Prof. Russo", "Prof.ssa Ricci",
     "Prof. Conti", "Prof. De Luca", "Prof.ssa Fontana", "Prof.ssa Gallo",
-    "Prof. Costa", "Prof.ssa Giordano", "Prof. Mancini", "Prof. Rizzo",
-    "Prof.ssa Lombardi", "Prof. Moretti", "Prof.ssa Barbieri", "Prof.ssa Santoro",
-    "Prof. Marini", "Prof.ssa Rinaldi", "Prof. Caruso", "Prof.ssa Ferrara",
-    "Prof. Galli", "Prof.ssa Martini", "Prof. Leone", "Prof.ssa Longo",
-    "Prof. Gentile", "Prof.ssa Martinelli", "Prof. Vitale", "Prof.ssa Serra",
-    "Prof. Coppola", "Prof.ssa Amato", "Prof. Fabbri", "Prof.ssa Gatti",
-    "Prof. Pellegrini", "Prof.ssa Palumbo", "Prof. Sanna", "Prof.ssa Grasso"
+    "Prof. Costa", "Prof.ssa Giordano", "Prof. Mancini", "Prof. Rizzo"
 ]
 
 def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang: str = "Spagnolo", with_theater: bool = False, num_days: int = 5) -> TimetableProblem:
@@ -124,7 +182,8 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
         late_days: Optional[List[str]] = None,
         early_days: Optional[List[str]] = None,
         unavail_slots: Optional[List[List[int]]] = None,
-        soft_slots: Optional[List[List[int]]] = None
+        soft_slots: Optional[List[List[int]]] = None,
+        preferred_areas: Optional[List[str]] = None
     ) -> Teacher:
         f_list = free_days or []
         t = Teacher(
@@ -137,6 +196,7 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
             free_days=f_list,
             free_day_1=f_list[0] if len(f_list) > 0 else None,
             free_day_2=f_list[1] if len(f_list) > 1 else None,
+            preferred_areas=preferred_areas or [],
             prefer_late_entry=late,
             prefer_early_exit=early,
             late_entry_days=late_days or [],
@@ -206,11 +266,11 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
     for let_t_idx, t_items in enumerate(let_teachers_assigned, 1):
         tot_t_h = sum(x[2] for x in t_items)
         is_pt = (tot_t_h < 18)
-        t_id = f"doc_let_{let_t_idx}"
+        t_id, official_t_name, _ = get_official_teacher_meta("let", let_t_idx)
+        t_name = official_t_name if not is_pt else f"{official_t_name} (Part-Time {tot_t_h}h)"
         
         # Desiderata realistici diversificati per ciascun docente di Lettere
         if is_pt:
-            t_name = next_teacher_name(f"Part-Time Lettere {tot_t_h}h")
             m_days = 3
             pt_free = ["Lunedì", "Mercoledì"] if tot_t_h >= 10 else ["Martedì", "Giovedì"]
             create_and_add_teacher(
@@ -221,8 +281,6 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
                 late=(let_t_idx % 2 == 0)
             )
         else:
-            t_name = next_teacher_name("Lettere")
-            # Docenti a tempo pieno con desiderata specifici (giorno libero su 6 giorni)
             free_choice = ["Lunedì", "Sabato", "Mercoledì", "Giovedì", "Venerdì", "Martedì"][(let_t_idx - 1) % 6] if (config.num_days == 6) else None
             late_choice = ["Lunedì", "Giovedì"] if (let_t_idx % 3 == 0) else []
             early_choice = ["Mercoledì", "Venerdì"] if (let_t_idx % 3 == 1) else []
@@ -265,7 +323,6 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
     # Crea docenti a tempo pieno e almeno un docente Part-Time in Mat/Scienze (12h + 6h)
     target_cuts = [18] * (len(class_keys) // 3)
     if len(class_keys) >= 6 and len(target_cuts) >= 2:
-        # Trasforma l'ultima cattedra da 18h in due part-time: 12h + 6h
         target_cuts[-1] = 12
         target_cuts.append(6)
 
@@ -276,9 +333,9 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
         cur_target = target_cuts[cut_idx] if cut_idx < len(target_cuts) else 18
         
         if current_mat_h >= cur_target:
-            t_id = f"doc_mat_{mat_t_idx}"
+            t_id, official_t_name, _ = get_official_teacher_meta("mat", mat_t_idx)
             is_pt = (current_mat_h < 18)
-            t_name = next_teacher_name("Mat/Scienze" if not is_pt else f"Part-Time Mat/Sci {current_mat_h}h")
+            t_name = official_t_name if not is_pt else f"{official_t_name} (Part-Time {current_mat_h}h)"
             m_days = 2 if current_mat_h <= 6 else (3 if current_mat_h <= 12 else 5)
             
             if is_pt:
@@ -319,9 +376,9 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
             current_mat_h = 0
 
     if current_mat_items:
-        t_id = f"doc_mat_{mat_t_idx}"
+        t_id, official_t_name, _ = get_official_teacher_meta("mat", mat_t_idx)
         is_pt = (current_mat_h < 18)
-        t_name = next_teacher_name("Mat/Scienze" if not is_pt else f"Part-Time Mat/Sci {current_mat_h}h")
+        t_name = official_t_name if not is_pt else f"{official_t_name} (Part-Time {current_mat_h}h)"
         m_days = 2 if current_mat_h <= 6 else (3 if current_mat_h <= 12 else 5)
         create_and_add_teacher(
             t_id, t_name, "A-28", current_mat_h, 
@@ -350,8 +407,8 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
     for c_id in class_keys:
         current_ing_classes.append(c_id)
         if len(current_ing_classes) == 6:
-            t_id = f"doc_ing_{ing_t_idx}"
-            t_name = next_teacher_name("Inglese")
+            t_id, official_t_name, _ = get_official_teacher_meta("ing", ing_t_idx)
+            t_name = official_t_name
             free_choice = ["Mercoledì", "Sabato", "Lunedì", "Venerdì"][(ing_t_idx - 1) % 4] if (config.num_days == 6) else None
             late_choice = ["Lunedì"] if (ing_t_idx == 2) else []
             early_choice = ["Venerdì"] if (ing_t_idx == 1) else []
@@ -379,9 +436,9 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
 
     if current_ing_classes:
         h_rem = len(current_ing_classes) * 3
-        t_id = f"doc_ing_{ing_t_idx}"
+        t_id, official_t_name, _ = get_official_teacher_meta("ing", ing_t_idx)
         is_pt = (h_rem < 18)
-        t_name = next_teacher_name("Inglese" if not is_pt else f"Part-Time Inglese {h_rem}h")
+        t_name = official_t_name if not is_pt else f"{official_t_name} (Part-Time {h_rem}h)"
         m_days = 2 if h_rem <= 6 else (3 if h_rem <= 12 else 5)
         create_and_add_teacher(
             t_id, t_name, "A-24", h_rem,
@@ -418,8 +475,8 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
         for c_id in class_keys:
             current_sub_classes.append(c_id)
             if len(current_sub_classes) == 9: # 9 classi * 2h = 18h piena cattedra!
-                t_id = f"doc_{s_code}_{t_idx}"
-                t_name = next_teacher_name(s_label)
+                t_id, official_t_name, _ = get_official_teacher_meta(s_code, t_idx)
+                t_name = official_t_name
                 # Desiderata personali per docenti specialisti (giorno libero su 6 giorni)
                 late_choice = ["Lunedì"] if (t_idx % 2 == 0) else []
                 early_choice = ["Venerdì"] if (t_idx % 2 == 1) else []
@@ -452,9 +509,9 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
 
         if current_sub_classes:
             h_rem = len(current_sub_classes) * 2
-            t_id = f"doc_{s_code}_{t_idx}"
+            t_id, official_t_name, _ = get_official_teacher_meta(s_code, t_idx)
             is_pt = (h_rem < 18)
-            t_name = next_teacher_name(s_label if not is_pt else f"Part-Time {s_label} {h_rem}h")
+            t_name = official_t_name if not is_pt else f"{official_t_name} (Part-Time {h_rem}h)"
             m_days = 2 if h_rem <= 8 else (3 if h_rem <= 12 else 5)
             create_and_add_teacher(
                 t_id, t_name, s_cdc, h_rem,
@@ -488,9 +545,9 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
         cur_target = target_rel_cuts[cut_rel_idx] if cut_rel_idx < len(target_rel_cuts) else 18
         
         if cur_req_h >= cur_target:
-            t_id = f"doc_rel_{rel_t_idx}"
+            t_id, official_t_name, _ = get_official_teacher_meta("rel", rel_t_idx)
             is_pt = (cur_req_h < 18)
-            t_name = next_teacher_name("Religione" if not is_pt else f"Part-Time Religione {cur_req_h}h")
+            t_name = official_t_name if not is_pt else f"{official_t_name} (Part-Time {cur_req_h}h)"
             m_days = 2 if cur_req_h <= 6 else (3 if cur_req_h <= 12 else 4)
             free_choice_rel = ["Sabato", "Lunedì"][(rel_t_idx - 1) % 2] if (config.num_days == 6) else None
             create_and_add_teacher(
@@ -516,9 +573,9 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
 
     if current_rel_classes:
         cur_req_h = len(current_rel_classes) * 1
-        t_id = f"doc_rel_{rel_t_idx}"
+        t_id, official_t_name, _ = get_official_teacher_meta("rel", rel_t_idx)
         is_pt = (cur_req_h < 18)
-        t_name = next_teacher_name("Religione" if not is_pt else f"Part-Time Religione {cur_req_h}h")
+        t_name = official_t_name if not is_pt else f"{official_t_name} (Part-Time {cur_req_h}h)"
         m_days = 2 if cur_req_h <= 6 else (3 if cur_req_h <= 12 else 4)
         create_and_add_teacher(
             t_id, t_name, "Religione", cur_req_h,
@@ -539,59 +596,243 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
             ))
         rel_t_idx += 1
 
-    # 5. Generazione Aule della Scuola con Assegnazione Docenti
+    # 5. Generazione Aule della Scuola con Assegnazione Docenti (DADA Ufficiale 26 Spazi)
     if is_dada:
-        # Modello DADA: Aule tematiche disciplinari con docenti assegnati (100% garantiti)
         rooms = {
-            # Lettere (A-22): 1 aula dedicata a Priorità 1 per ciascun docente di cattedra
-            "chichibio": Classroom(id="chichibio", name="CHICHIBIO (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_1"] if "doc_let_1" in teachers else []),
-            "magellano": Classroom(id="magellano", name="MAGELLANO (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_2"] if "doc_let_2" in teachers else []),
-            "dante": Classroom(id="dante", name="DANTE (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_3"] if "doc_let_3" in teachers else []),
-            "antigone": Classroom(id="antigone", name="ANTIGONE (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_4"] if "doc_let_4" in teachers else []),
-            "pinocchio": Classroom(id="pinocchio", name="PINOCCHIO (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_5"] if "doc_let_5" in teachers else []),
-            "leopardi": Classroom(id="leopardi", name="LEOPARDI (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_6"] if "doc_let_6" in teachers else []),
-            "didone": Classroom(id="didone", name="DIDONE (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_7"] if "doc_let_7" in teachers else []),
-            "marco_polo": Classroom(id="marco_polo", name="MARCO POLO (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_8"] if "doc_let_8" in teachers else []),
-            "gagarin": Classroom(id="gagarin", name="GAGARIN (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_9"] if "doc_let_9" in teachers else []),
-            "pascoli": Classroom(id="pascoli", name="PASCOLI (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_10"] if "doc_let_10" in teachers else []),
-            "ungaretti": Classroom(id="ungaretti", name="UNGARETTI (Aula Lettere)", subject_ids=["ita", "sto", "geo"], capacity=1, priority=1, teacher_ids=["doc_let_11"] if "doc_let_11" in teachers else []),
-
-            # Matematica e Scienze (A-28): 1 aula/lab a Priorità 1 per ciascun docente di cattedra
-            "euclide": Classroom(id="euclide", name="EUCLIDE (Aula Matematica)", subject_ids=["mat", "sci"], capacity=1, priority=1, teacher_ids=["doc_mat_1"] if "doc_mat_1" in teachers else []),
-            "pitagora": Classroom(id="pitagora", name="PITAGORA (Aula Matematica)", subject_ids=["mat", "sci"], capacity=1, priority=1, teacher_ids=["doc_mat_2"] if "doc_mat_2" in teachers else []),
-            "galileo": Classroom(id="galileo", name="GALILEO (Lab Scienze & Matematica)", subject_ids=["sci", "mat"], capacity=1, is_special_lab=True, priority=1, teacher_ids=["doc_mat_3"] if "doc_mat_3" in teachers else []),
-            "eulero": Classroom(id="eulero", name="EULERO (Aula Matematica)", subject_ids=["mat", "sci"], capacity=1, priority=1, teacher_ids=["doc_mat_4"] if "doc_mat_4" in teachers else []),
-            "newton": Classroom(id="newton", name="NEWTON (Aula Matematica)", subject_ids=["mat", "sci"], capacity=1, priority=1, teacher_ids=["doc_mat_5"] if "doc_mat_5" in teachers else []),
-            "fermi": Classroom(id="fermi", name="FERMI (Aula Matematica)", subject_ids=["mat", "sci"], capacity=1, priority=1, teacher_ids=["doc_mat_6"] if "doc_mat_6" in teachers else []),
-            "pascal": Classroom(id="pascal", name="PASCAL (Aula Matematica)", subject_ids=["mat", "sci"], capacity=1, priority=1, teacher_ids=["doc_mat_7"] if "doc_mat_7" in teachers else []),
-
-            # Lingue Straniere: 1 aula a Priorità 1 per ciascun docente di lingua
-            "queen": Classroom(id="queen", name="QUEEN (Aula Inglese)", subject_ids=["ing"], capacity=1, priority=1, teacher_ids=["doc_ing_1"] if "doc_ing_1" in teachers else []),
-            "strawberry": Classroom(id="strawberry", name="STRAWBERRY (Aula Inglese)", subject_ids=["ing"], capacity=1, priority=1, teacher_ids=["doc_ing_2"] if "doc_ing_2" in teachers else []),
-            "cambridge": Classroom(id="cambridge", name="CAMBRIDGE (Aula Inglese)", subject_ids=["ing"], capacity=1, priority=1, teacher_ids=["doc_ing_3"] if "doc_ing_3" in teachers else []),
-            "verne": Classroom(id="verne", name="VERNE (Aula Seconda Lingua)", subject_ids=["spa"], capacity=1, priority=1, teacher_ids=["doc_spa_1"] if "doc_spa_1" in teachers else []),
-            "moliere": Classroom(id="moliere", name="MOLIERE (Aula Seconda Lingua)", subject_ids=["spa"], capacity=1, priority=1, teacher_ids=["doc_spa_2"] if "doc_spa_2" in teachers else []),
-
-            # Scienze Motorie: BEBE VIO Principale (Priorità 1 - Satura a 30h) vs MURATORI (Priorità 2 - Solo per le restanti 6h)
-            "bebe_vio": Classroom(id="bebe_vio", name="BEBE VIO (Palestra Principale)", subject_ids=["mot"], capacity=1, is_special_lab=True, priority=1),
-            "palestra_muratori": Classroom(id="palestra_muratori", name="PALESTRA MURATORI (Secondaria / Emergenza)", subject_ids=["mot"], capacity=1, is_special_lab=True, priority=2),
-
-            # Laboratori Artistici & Tecnologici: 1 lab a Priorità 1 per ciascun docente
-            "monet": Classroom(id="monet", name="MONET (Lab Arte Principale)", subject_ids=["art"], capacity=1, is_special_lab=True, priority=1, teacher_ids=["doc_art_1"] if "doc_art_1" in teachers else []),
-            "miro": Classroom(id="miro", name="MIRO' (Lab Arte)", subject_ids=["art"], capacity=1, is_special_lab=True, priority=1, teacher_ids=["doc_art_2"] if "doc_art_2" in teachers else []),
-            "archimede": Classroom(id="archimede", name="ARCHIMEDE (Lab Tecnologia Principale)", subject_ids=["tec"], capacity=1, is_special_lab=True, priority=1, teacher_ids=["doc_tec_1"] if "doc_tec_1" in teachers else []),
-            "leonardo": Classroom(id="leonardo", name="LEONARDO (Lab Tecnologia)", subject_ids=["tec"], capacity=1, is_special_lab=True, priority=1, teacher_ids=["doc_tec_2"] if "doc_tec_2" in teachers else []),
-            "r2_d2": Classroom(id="r2_d2", name="R2-D2 (Lab STEM / Robotica)", subject_ids=["tec"], capacity=1, is_special_lab=True, priority=2),
-
-            # Laboratori Musicali: 1 lab a Priorità 1 per ciascun docente
-            "bach": Classroom(id="bach", name="BACH (Lab Musica Principale)", subject_ids=["mus"], capacity=1, is_special_lab=True, priority=1, teacher_ids=["doc_mus_1"] if "doc_mus_1" in teachers else []),
-            "armstrong": Classroom(id="armstrong", name="ARMSTRONG (Lab Musica)", subject_ids=["mus"], capacity=1, is_special_lab=True, priority=1, teacher_ids=["doc_mus_2"] if "doc_mus_2" in teachers else []),
-
-            # Religione & Spazi Teatrali:
-            "maddalena_malala": Classroom(id="maddalena_malala", name="MADDALENA-MALALA (Religione)", subject_ids=["rel"], capacity=1, priority=1, teacher_ids=["doc_rel_1"] if "doc_rel_1" in teachers else []),
-            "assisi": Classroom(id="assisi", name="SAN FRANCESCO (Religione)", subject_ids=["rel"], capacity=1, priority=1, teacher_ids=["doc_rel_2"] if "doc_rel_2" in teachers else []),
-            "teatro": Classroom(id="teatro", name="LABORATORIO TEATRO (Spazio Principale)", subject_ids=["tea", "app_custom"], capacity=1, is_special_lab=True, priority=1),
-            "auditorium": Classroom(id="auditorium", name="AUDITORIUM (Spazio Secondario / Riserva)", subject_ids=["tea", "app_custom"], capacity=1, is_special_lab=True, priority=2),
+            "leonardo": Classroom(
+                id="leonardo",
+                name="LEONARDO",
+                subject_ids=["tec", "sci"],
+                capacity=1,
+                is_special_lab=True,
+                priority=1,
+                teacher_ids=[t for t in ["doc_tec_1", "doc_mat_1", "doc_mat_6"] if t in teachers]
+            ),
+            "archimede": Classroom(
+                id="archimede",
+                name="ARCHIMEDE",
+                subject_ids=["tec"],
+                capacity=1,
+                is_special_lab=True,
+                priority=1,
+                teacher_ids=[t for t in ["doc_tec_2"] if t in teachers]
+            ),
+            "magellano": Classroom(
+                id="magellano",
+                name="MAGELLANO",
+                subject_ids=["sto", "geo"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_let_2", "doc_let_9", "doc_let_4", "doc_let_6"] if t in teachers]
+            ),
+            "bebe_vio": Classroom(
+                id="bebe_vio",
+                name="BEBE VIO",
+                subject_ids=["mot"],
+                capacity=1,
+                is_special_lab=True,
+                priority=1,
+                teacher_ids=[t for t in ["doc_mot_1", "doc_mot_2", "doc_mot_3"] if t in teachers]
+            ),
+            "palestra_murato": Classroom(
+                id="palestra_murato",
+                name="PALESTRA MURATO",
+                subject_ids=["mot"],
+                capacity=1,
+                is_special_lab=True,
+                priority=2,
+                teacher_ids=[t for t in ["doc_mot_4", "doc_mot_1"] if t in teachers]
+            ),
+            "galileo": Classroom(
+                id="galileo",
+                name="GALILEO",
+                subject_ids=["sci"],
+                capacity=1,
+                is_special_lab=True,
+                priority=1,
+                teacher_ids=[t for t in ["doc_mat_7", "doc_mat_5", "doc_mat_2", "doc_mat_4", "doc_mat_3", "doc_mat_6"] if t in teachers]
+            ),
+            "maddalena_malal": Classroom(
+                id="maddalena_malal",
+                name="MADDALENA-MALAL",
+                subject_ids=["rel"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_rel_1"] if t in teachers]
+            ),
+            "bach": Classroom(
+                id="bach",
+                name="BACH",
+                subject_ids=["mus"],
+                capacity=1,
+                is_special_lab=True,
+                priority=1,
+                teacher_ids=[t for t in ["doc_mus_1"] if t in teachers]
+            ),
+            "armstrong": Classroom(
+                id="armstrong",
+                name="ARMSTRONG",
+                subject_ids=["mus"],
+                capacity=1,
+                is_special_lab=True,
+                priority=1,
+                teacher_ids=[t for t in ["doc_mus_2"] if t in teachers]
+            ),
+            "euclide": Classroom(
+                id="euclide",
+                name="EUCLIDE",
+                subject_ids=["mat"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_mat_1", "doc_mat_2", "doc_mat_3"] if t in teachers]
+            ),
+            "pitagora": Classroom(
+                id="pitagora",
+                name="PITAGORA",
+                subject_ids=["mat"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_mat_4", "doc_mat_5"] if t in teachers]
+            ),
+            "eulero": Classroom(
+                id="eulero",
+                name="EULERO",
+                subject_ids=["mat"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_mat_6", "doc_mat_7", "doc_mat_3"] if t in teachers]
+            ),
+            "chichibio": Classroom(
+                id="chichibio",
+                name="CHICHIBIO",
+                subject_ids=["ita"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_let_1", "doc_let_2"] if t in teachers]
+            ),
+            "antigone": Classroom(
+                id="antigone",
+                name="ANTIGONE",
+                subject_ids=["ita"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_let_3", "doc_let_4", "doc_let_5"] if t in teachers]
+            ),
+            "pinocchio": Classroom(
+                id="pinocchio",
+                name="PINOCCHIO",
+                subject_ids=["ita"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_let_6", "doc_let_7"] if t in teachers]
+            ),
+            "didone": Classroom(
+                id="didone",
+                name="DIDONE",
+                subject_ids=["ita"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_let_8", "doc_let_9"] if t in teachers]
+            ),
+            "queen": Classroom(
+                id="queen",
+                name="QUEEN",
+                subject_ids=["ing"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_ing_1", "doc_ing_2"] if t in teachers]
+            ),
+            "strawberry": Classroom(
+                id="strawberry",
+                name="STRAWBERRY",
+                subject_ids=["ing"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_ing_2", "doc_ing_3"] if t in teachers]
+            ),
+            "gagarin": Classroom(
+                id="gagarin",
+                name="GAGARIN",
+                subject_ids=["geo", "sto", "tea", "app_custom"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_let_10", "doc_let_1", "doc_let_7"] if t in teachers]
+            ),
+            "marco_polo": Classroom(
+                id="marco_polo",
+                name="MARCO POLO",
+                subject_ids=["geo", "sto"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_let_5", "doc_let_3", "doc_let_8"] if t in teachers]
+            ),
+            "verne": Classroom(
+                id="verne",
+                name="VERNE",
+                subject_ids=["spa"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_spa_1"] if t in teachers]
+            ),
+            "moliere": Classroom(
+                id="moliere",
+                name="MOLIERE",
+                subject_ids=["spa"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_spa_2"] if t in teachers]
+            ),
+            "monet": Classroom(
+                id="monet",
+                name="MONET",
+                subject_ids=["art"],
+                capacity=1,
+                is_special_lab=True,
+                priority=1,
+                teacher_ids=[t for t in ["doc_art_1", "doc_art_2"] if t in teachers]
+            ),
+            "miro": Classroom(
+                id="miro",
+                name="MIRO'",
+                subject_ids=["art"],
+                capacity=1,
+                is_special_lab=True,
+                priority=1,
+                teacher_ids=[t for t in ["doc_art_3", "doc_art_2"] if t in teachers]
+            ),
+            "r2_d2": Classroom(
+                id="r2_d2",
+                name="R2-D2",
+                subject_ids=["tec"],
+                capacity=1,
+                is_special_lab=True,
+                priority=2,
+                teacher_ids=[]
+            ),
+            "auditorium": Classroom(
+                id="auditorium",
+                name="AUDITORIUM",
+                subject_ids=["tea", "app_custom", "geo", "sto", "ita"],
+                capacity=1,
+                is_special_lab=True,
+                priority=2,
+                teacher_ids=[t for t in ["doc_let_4", "doc_let_10", "doc_let_7", "doc_let_1", "doc_let_8", "doc_let_6", "doc_let_11", "doc_let_3", "doc_let_2"] if t in teachers]
+            ),
         }
     else:
         # Modello Tradizionale: Aule ordinarie per TUTTE le classi della scuola + Palestre e Laboratori Speciali Condivisi
@@ -619,13 +860,136 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
             rooms["teatro"] = Classroom(id="teatro", name="Laboratorio di Teatro (Spazio Principale)", subject_ids=["tea", "app_custom"], capacity=1, is_special_lab=True, priority=1)
             rooms["auditorium"] = Classroom(id="auditorium", name="Auditorium (Spazio Secondario)", subject_ids=["tea", "app_custom"], capacity=1, is_special_lab=True, priority=2)
 
+    # 6. Alunni DVA (23 Casi: max 2 per classe, 16 a 18h [6 gravi], 7 a 9h)
+    students_dva = {}
+    support_assignments = []
+    enhancement_assignments = []
+    
+    if len(class_keys) >= 2:
+        # Definizione del catalogo Casi DVA
+        dva_specs_catalog = [
+            # 6 Casi Gravi (18h ciascuno, rapporto 1:1)
+            ("stud_dva_1", "Alunno Rossi M.", 0, 18, True, ["ita", "mat", "ing"], ["mot"], "Caso Grave (1:1) - Supporto continuo"),
+            ("stud_dva_2", "Alunno Ferrari G.", 1, 18, True, ["ita", "mat", "sci"], ["rel"], "Caso Grave (1:1) - Supporto continuo"),
+            ("stud_dva_3", "Alunno Romano L.", 2, 18, True, ["ita", "mat", "tec"], ["mot"], "Caso Grave (1:1) - Supporto continuo"),
+            ("stud_dva_4", "Alunno Colombo S.", 3, 18, True, ["ita", "mat", "sto"], ["rel"], "Caso Grave (1:1) - Supporto continuo"),
+            ("stud_dva_5", "Alunno Ricci A.", 4, 18, True, ["ita", "mat", "ing"], ["mot"], "Caso Grave (1:1) - Supporto continuo"),
+            ("stud_dva_6", "Alunno Marino E.", 5, 18, True, ["ita", "mat", "sci"], ["mus"], "Caso Grave (1:1) - Supporto continuo"),
+
+            # 10 Casi Medi da 18h
+            ("stud_dva_7", "Alunno Bianchi F.", 0, 18, False, ["mat", "sci", "tec"], ["rel"], "Supporto logico-scientifico"),
+            ("stud_dva_8", "Alunno Conti D.", 1, 18, False, ["ita", "sto", "geo"], ["mot"], "Supporto linguistico-espressivo"),
+            ("stud_dva_9", "Alunno De Luca P.", 2, 18, False, ["mat", "tec", "ing"], ["art"], "Supporto materie tecniche"),
+            ("stud_dva_10", "Alunno Costa V.", 6, 18, False, ["ita", "mat", "sci"], [], "Supporto generale"),
+            ("stud_dva_11", "Alunno Giordano M.", 7, 18, False, ["ita", "sto", "ing"], ["mot"], "Supporto area umanistica"),
+            ("stud_dva_12", "Alunno Mancini R.", 8, 18, False, ["mat", "sci", "tec"], ["rel"], "Supporto area scientifica"),
+            ("stud_dva_13", "Alunno Rizzo K.", 9, 18, False, ["ita", "mat", "ing"], [], "Supporto discipline di base"),
+            ("stud_dva_14", "Alunno Lombardi T.", 10, 18, False, ["ita", "sto", "geo"], ["mus"], "Supporto area linguistica"),
+            ("stud_dva_15", "Alunno Moretti N.", 11, 18, False, ["mat", "sci", "tec"], ["art"], "Supporto tecnologico"),
+            ("stud_dva_16", "Alunno Barbieri C.", 12, 18, False, ["ita", "mat", "sci"], ["mot"], "Supporto didattico"),
+
+            # 7 Casi da 9h (Spezzoni / Autonomia parziale)
+            ("stud_dva_17", "Alunno Santoro I.", 3, 9, False, ["mat", "sci"], ["mot", "mus"], "Spezzone 9h - Supporto matematica"),
+            ("stud_dva_18", "Alunno Marini G.", 4, 9, False, ["ita", "ing"], ["rel", "art"], "Spezzone 9h - Supporto lingue"),
+            ("stud_dva_19", "Alunno Rinaldi B.", 5, 9, False, ["mat", "tec"], ["mot", "rel"], "Spezzone 9h - Supporto scienze"),
+            ("stud_dva_20", "Alunno Caruso H.", 6, 9, False, ["ita", "sto"], ["mus", "art"], "Spezzone 9h - Supporto lettere"),
+            ("stud_dva_21", "Alunno Ferrara O.", 7, 9, False, ["mat", "sci"], ["mot", "rel"], "Spezzone 9h - Supporto matematica"),
+            ("stud_dva_22", "Alunno Galli J.", 15, 9, False, ["ita", "ing"], ["art", "rel"], "Spezzone 9h - Supporto inglese"),
+            ("stud_dva_23", "Alunno Martini Y.", 16, 9, False, ["mat", "sci"], ["mot", "mus"], "Spezzone 9h - Supporto logica")
+        ]
+
+        sos_last_names = [
+            "Gentile", "Marini", "Serra", "Coppola", "Amato", "Fabbri", "Gatti", "Pellegrini",
+            "Palumbo", "Sanna", "Grasso", "Monti", "Riva", "Donati", "Carbone", "D'Amico",
+            "Castelli", "Ferraro", "Basile", "Vitale"
+        ]
+
+        if len(class_keys) >= 18:
+            num_sos_teachers = 20
+            dva_specs = dva_specs_catalog
+        else:
+            # Scala proporzionalmente: circa 1 docente di sostegno ogni 1-2 classi
+            num_sos_teachers = min(len(sos_last_names), max(1, len(class_keys) // 2 + (1 if len(class_keys) % 2 != 0 else 0)))
+            dva_specs = dva_specs_catalog[:max(2, num_sos_teachers * 2)]
+
+        # Popola students_dva (usa s_name pulito senza duplicare la classe)
+        for s_idx_num, (s_id, s_name, c_idx, s_hours, s_sev, s_pref, s_excl, s_notes) in enumerate(dva_specs):
+            target_c = class_keys[s_idx_num % len(class_keys)]
+            students_dva[s_id] = StudentDVA(
+                id=s_id,
+                name=s_name,
+                class_id=target_c,
+                weekly_hours=s_hours,
+                is_severe_coverage=s_sev,
+                preferred_subjects=s_pref,
+                excluded_subjects=s_excl,
+                preferred_hours=[0, 1, 2, 3],
+                notes=s_notes
+            )
+
+        spec_by_id = {s[0]: s for s in dva_specs}
+        dva_ids_list = list(students_dva.keys())
+
+        # Creazione dei docenti di sostegno
+        for t_i in range(num_sos_teachers):
+            t_id = f"doc_sos_{t_i+1}"
+            cognome = sos_last_names[t_i % len(sos_last_names)]
+            free_d = [DAYS_OF_WEEK[t_i % 5]] if num_days == 6 else []
+            
+            p_areas = ["scientifica"] if t_i % 4 == 0 else (["umanistica"] if t_i % 4 == 1 else (["artistica"] if t_i % 4 == 2 else ["lingue"]))
+            
+            create_and_add_teacher(
+                t_id, f"Prof. {cognome} (Sostegno 18h)", "ADMM - Sostegno", 18, 
+                is_pt=False, 
+                free_days=free_d,
+                preferred_areas=p_areas
+            )
+            
+            # Assegna 2 casi da 9h (oppure 1 caso da 18h)
+            if len(dva_ids_list) >= 2:
+                s1_id = dva_ids_list[(t_i * 2) % len(dva_ids_list)]
+                s2_id = dva_ids_list[(t_i * 2 + 1) % len(dva_ids_list)]
+                s1_obj = students_dva[s1_id]
+                s2_obj = students_dva[s2_id]
+                
+                support_assignments.append(SupportAssignment(
+                    id=f"sa_{t_id}_{s1_obj.class_id}_{s1_id}",
+                    teacher_id=t_id,
+                    student_id=s1_id,
+                    class_id=s1_obj.class_id,
+                    hours_per_week=9,
+                    preferred_subject_ids=s1_obj.preferred_subjects
+                ))
+                support_assignments.append(SupportAssignment(
+                    id=f"sa_{t_id}_{s2_obj.class_id}_{s2_id}",
+                    teacher_id=t_id,
+                    student_id=s2_id,
+                    class_id=s2_obj.class_id,
+                    hours_per_week=9,
+                    preferred_subject_ids=s2_obj.preferred_subjects
+                ))
+
+        # Docente di Potenziamento
+        create_and_add_teacher("doc_pot_1", "Prof.ssa Palumbo (Potenziamento Lettere)", "A-22 - Lettere (Potenziamento)", 18, is_pt=False)
+        enhancement_assignments.append(EnhancementAssignment(
+            id="pot_ita_1",
+            teacher_id="doc_pot_1",
+            subject_id="ita",
+            hours_per_week=18,
+            target_class_ids=list(class_keys),
+            activity_type="compresenza"
+        ))
+
     return TimetableProblem(
         config=config,
         teachers=teachers,
         classes=classes,
         subjects=subjects,
         rooms=rooms,
-        assignments=assignments
+        assignments=assignments,
+        students_dva=students_dva,
+        support_assignments=support_assignments,
+        enhancement_assignments=enhancement_assignments
     )
 
 def get_empty_problem(school_name: str = "Scuola Secondaria di I Grado", num_days: int = 5) -> TimetableProblem:
@@ -661,3 +1025,243 @@ def get_empty_problem(school_name: str = "Scuola Secondaria di I Grado", num_day
         rooms={},
         assignments=[]
     )
+
+def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Dict[str, Classroom]:
+    """Restituisce il dizionario delle 26 aule/laboratori ufficiali DADA con docenti assegnati."""
+    t_map = teachers if teachers is not None else {}
+    return {
+        "leonardo": Classroom(
+            id="leonardo",
+            name="LEONARDO",
+            subject_ids=["tec", "sci"],
+            capacity=1,
+            is_special_lab=True,
+            priority=1,
+            teacher_ids=[t for t in ["doc_tec_1", "doc_mat_1", "doc_mat_6"] if not t_map or t in t_map]
+        ),
+        "archimede": Classroom(
+            id="archimede",
+            name="ARCHIMEDE",
+            subject_ids=["tec"],
+            capacity=1,
+            is_special_lab=True,
+            priority=1,
+            teacher_ids=[t for t in ["doc_tec_2"] if not t_map or t in t_map]
+        ),
+        "magellano": Classroom(
+            id="magellano",
+            name="MAGELLANO",
+            subject_ids=["sto", "geo"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_let_2", "doc_let_9", "doc_let_4", "doc_let_6"] if not t_map or t in t_map]
+        ),
+        "bebe_vio": Classroom(
+            id="bebe_vio",
+            name="BEBE VIO",
+            subject_ids=["mot"],
+            capacity=1,
+            is_special_lab=True,
+            priority=1,
+            teacher_ids=[t for t in ["doc_mot_1", "doc_mot_2", "doc_mot_3"] if not t_map or t in t_map]
+        ),
+        "palestra_murato": Classroom(
+            id="palestra_murato",
+            name="PALESTRA MURATO",
+            subject_ids=["mot"],
+            capacity=1,
+            is_special_lab=True,
+            priority=2,
+            teacher_ids=[t for t in ["doc_mot_4", "doc_mot_1"] if not t_map or t in t_map]
+        ),
+        "galileo": Classroom(
+            id="galileo",
+            name="GALILEO",
+            subject_ids=["sci"],
+            capacity=1,
+            is_special_lab=True,
+            priority=1,
+            teacher_ids=[t for t in ["doc_mat_7", "doc_mat_5", "doc_mat_2", "doc_mat_4", "doc_mat_3", "doc_mat_6"] if not t_map or t in t_map]
+        ),
+        "maddalena_malal": Classroom(
+            id="maddalena_malal",
+            name="MADDALENA-MALAL",
+            subject_ids=["rel"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_rel_1"] if not t_map or t in t_map]
+        ),
+        "bach": Classroom(
+            id="bach",
+            name="BACH",
+            subject_ids=["mus"],
+            capacity=1,
+            is_special_lab=True,
+            priority=1,
+            teacher_ids=[t for t in ["doc_mus_1"] if not t_map or t in t_map]
+        ),
+        "armstrong": Classroom(
+            id="armstrong",
+            name="ARMSTRONG",
+            subject_ids=["mus"],
+            capacity=1,
+            is_special_lab=True,
+            priority=1,
+            teacher_ids=[t for t in ["doc_mus_2"] if not t_map or t in t_map]
+        ),
+        "euclide": Classroom(
+            id="euclide",
+            name="EUCLIDE",
+            subject_ids=["mat"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_mat_1", "doc_mat_2", "doc_mat_3"] if not t_map or t in t_map]
+        ),
+        "pitagora": Classroom(
+            id="pitagora",
+            name="PITAGORA",
+            subject_ids=["mat"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_mat_4", "doc_mat_5"] if not t_map or t in t_map]
+        ),
+        "eulero": Classroom(
+            id="eulero",
+            name="EULERO",
+            subject_ids=["mat"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_mat_6", "doc_mat_7", "doc_mat_3"] if not t_map or t in t_map]
+        ),
+        "chichibio": Classroom(
+            id="chichibio",
+            name="CHICHIBIO",
+            subject_ids=["ita"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_let_1", "doc_let_2"] if not t_map or t in t_map]
+        ),
+        "antigone": Classroom(
+            id="antigone",
+            name="ANTIGONE",
+            subject_ids=["ita"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_let_3", "doc_let_4", "doc_let_5"] if not t_map or t in t_map]
+        ),
+        "pinocchio": Classroom(
+            id="pinocchio",
+            name="PINOCCHIO",
+            subject_ids=["ita"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_let_6", "doc_let_7"] if not t_map or t in t_map]
+        ),
+        "didone": Classroom(
+            id="didone",
+            name="DIDONE",
+            subject_ids=["ita"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_let_8", "doc_let_9"] if not t_map or t in t_map]
+        ),
+        "queen": Classroom(
+            id="queen",
+            name="QUEEN",
+            subject_ids=["ing"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_ing_1", "doc_ing_2"] if not t_map or t in t_map]
+        ),
+        "strawberry": Classroom(
+            id="strawberry",
+            name="STRAWBERRY",
+            subject_ids=["ing"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_ing_2", "doc_ing_3"] if not t_map or t in t_map]
+        ),
+        "gagarin": Classroom(
+            id="gagarin",
+            name="GAGARIN",
+            subject_ids=["geo", "sto", "tea", "app_custom"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_let_10", "doc_let_1", "doc_let_7"] if not t_map or t in t_map]
+        ),
+        "marco_polo": Classroom(
+            id="marco_polo",
+            name="MARCO POLO",
+            subject_ids=["geo", "sto"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_let_5", "doc_let_3", "doc_let_8"] if not t_map or t in t_map]
+        ),
+        "verne": Classroom(
+            id="verne",
+            name="VERNE",
+            subject_ids=["spa"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_spa_1"] if not t_map or t in t_map]
+        ),
+        "moliere": Classroom(
+            id="moliere",
+            name="MOLIERE",
+            subject_ids=["spa"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_spa_2"] if not t_map or t in t_map]
+        ),
+        "monet": Classroom(
+            id="monet",
+            name="MONET",
+            subject_ids=["art"],
+            capacity=1,
+            is_special_lab=True,
+            priority=1,
+            teacher_ids=[t for t in ["doc_art_1", "doc_art_2"] if not t_map or t in t_map]
+        ),
+        "miro": Classroom(
+            id="miro",
+            name="MIRO'",
+            subject_ids=["art"],
+            capacity=1,
+            is_special_lab=True,
+            priority=1,
+            teacher_ids=[t for t in ["doc_art_3", "doc_art_2"] if not t_map or t in t_map]
+        ),
+        "r2_d2": Classroom(
+            id="r2_d2",
+            name="R2-D2",
+            subject_ids=["tec"],
+            capacity=1,
+            is_special_lab=True,
+            priority=2,
+            teacher_ids=[]
+        ),
+        "auditorium": Classroom(
+            id="auditorium",
+            name="AUDITORIUM",
+            subject_ids=["tea", "app_custom", "geo", "sto", "ita"],
+            capacity=1,
+            is_special_lab=True,
+            priority=2,
+            teacher_ids=[t for t in ["doc_let_4", "doc_let_10", "doc_let_7", "doc_let_1", "doc_let_8", "doc_let_6", "doc_let_11", "doc_let_3", "doc_let_2"] if not t_map or t in t_map]
+        ),
+    }

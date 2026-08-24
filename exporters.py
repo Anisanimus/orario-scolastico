@@ -10,12 +10,13 @@ Include:
 import io
 import pandas as pd
 import openpyxl
+from typing import Optional, Any
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from models import TimetableProblem, DAYS_OF_WEEK
 from solver import TimetableResult
 
-def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult) -> bytes:
+def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult, support_result: Optional[Any] = None) -> bytes:
     output = io.BytesIO()
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
@@ -40,6 +41,7 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult)
     free_day_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid") # Verde chiaro
     gap_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")      # Arancio chiaro
     room_fill = PatternFill(start_color="EDEDED", end_color="EDEDED", fill_type="solid")
+    sup_fill = PatternFill(start_color="F3E8FF", end_color="F3E8FF", fill_type="solid")       # Viola chiaro sostegno
     
     thin_border = Border(
         left=Side(style='thin', color='BFBFBF'),
@@ -47,21 +49,14 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult)
         top=Side(style='thin', color='BFBFBF'),
         bottom=Side(style='thin', color='BFBFBF')
     )
-    thick_right = Border(
-        right=Side(style='medium', color='1F4E78'),
-        left=Side(style='thin', color='BFBFBF'),
-        top=Side(style='thin', color='BFBFBF'),
-        bottom=Side(style='thin', color='BFBFBF')
-    )
     center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
     # -------------------------------------------------------------
-    # FOGLIO 1: TABELLONE GENERALE DOCENTI (RIGA PER DOCENTE)
+    # FOGLIO 1: TABELLONE GENERALE DOCENTI (COMBO CURRICOLARE + SOSTEGNO)
     # -------------------------------------------------------------
-    ws_tabellone = wb.create_sheet(title="Tabellone Generale Docenti")
+    ws_tabellone = wb.create_sheet(title="Tabellone Docenti (Combo)")
     
-    # Titolo Tabellone
-    title_text = f"TABELLONE GENERALE ORARIO DOCENTI - {cfg.school_name.upper()}"
+    title_text = f"TABELLONE GENERALE ORARIO DOCENTI (CURRICOLARE & SOSTEGNO) - {cfg.school_name.upper()}"
     ws_tabellone.merge_cells(start_row=1, start_column=1, end_row=1, end_column=3 + num_days * max_hours)
     t_cell = ws_tabellone.cell(row=1, column=1, value=title_text)
     t_cell.font = Font(name="Calibri", size=14, bold=True, color="1F4E78")
@@ -72,7 +67,7 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult)
     ws_tabellone.cell(row=3, column=1).font = header_font
     ws_tabellone.cell(row=3, column=1).alignment = center_align
 
-    ws_tabellone.cell(row=3, column=2, value="Contratto").fill = header_fill
+    ws_tabellone.cell(row=3, column=2, value="Contratto / Ruolo").fill = header_fill
     ws_tabellone.cell(row=3, column=2).font = header_font
     ws_tabellone.cell(row=3, column=2).alignment = center_align
 
@@ -94,7 +89,7 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult)
         
         col_cursor += h_in_day
 
-    # Riga 4: Sub-Header delle Ore (1ª, 2ª, 3ª...)
+    # Riga 4: Sub-Header delle Ore
     ws_tabellone.cell(row=4, column=1, value="").fill = sub_header_fill
     ws_tabellone.cell(row=4, column=2, value="").fill = sub_header_fill
     ws_tabellone.cell(row=4, column=3, value="").fill = sub_header_fill
@@ -109,16 +104,27 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult)
             h_cell.border = thin_border
             col_cursor += 1
 
-    # Righe per ciascun Docente
+    # Righe per ciascun Docente (Curricolare & Sostegno)
     row_cursor = 5
     for t_id, teacher in problem.teachers.items():
-        # Calcola totale ore assegnate
         t_assignments = [a for a in problem.assignments if a.teacher_id == t_id or t_id in a.co_teacher_ids]
-        tot_hours = sum(a.hours_per_week for a in t_assignments)
+        tot_cur_h = sum(a.hours_per_week for a in t_assignments)
         
-        is_pt = getattr(teacher, "is_part_time", False)
-        max_w = getattr(teacher, "max_working_days", None)
-        contratto_txt = f"PT (max {max_w} gg)" if (is_pt and max_w) else ("Part-Time" if is_pt else "Tempo Pieno")
+        t_sup_assigns = [sa for sa in problem.support_assignments if sa.teacher_id == t_id]
+        t_pot_assigns = [ea for ea in problem.enhancement_assignments if ea.teacher_id == t_id]
+        tot_sup_h = sum(sa.hours_per_week for sa in t_sup_assigns) + sum(ea.hours_per_week for ea in t_pot_assigns)
+        
+        is_support_teacher = tot_sup_h > 0 or "sostegno" in teacher.name.lower()
+        if tot_cur_h == 0 and tot_sup_h == 0:
+            continue
+            
+        tot_hours = tot_cur_h + tot_sup_h
+        is_pt = getattr(teacher, "is_part_time", False) or tot_hours < 15
+        
+        if is_support_teacher:
+            role_label = f"Sostegno PT ({tot_hours}h)" if is_pt else "Sostegno (18h)"
+        else:
+            role_label = f"Curricolare PT ({tot_hours}h)" if is_pt else "Curricolare (18h)"
 
         # Col 1: Docente
         c_doc = ws_tabellone.cell(row=row_cursor, column=1, value=teacher.name)
@@ -126,7 +132,7 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult)
         c_doc.border = thin_border
         
         # Col 2: Contratto
-        c_cont = ws_tabellone.cell(row=row_cursor, column=2, value=contratto_txt)
+        c_cont = ws_tabellone.cell(row=row_cursor, column=2, value=role_label)
         c_cont.font = Font(name="Calibri", size=9)
         c_cont.alignment = center_align
         c_cont.border = thin_border
@@ -137,68 +143,102 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult)
         c_tot.alignment = center_align
         c_tot.border = thin_border
 
-        # Calcola se il docente lavora in ciascun giorno
-        day_has_lessons = [False] * num_days
-        for d_idx in range(num_days):
-            for h in range(daily_hours[d_idx]):
-                if t_id in result.grid_by_teacher and result.grid_by_teacher[t_id][d_idx][h] is not None:
-                    day_has_lessons[d_idx] = True
-                    break
+        # Calcola griglia per il docente (curricolare o sostegno)
+        if not is_support_teacher:
+            grid_t = result.grid_by_teacher.get(t_id, [])
+            day_has_lessons = [False] * num_days
+            for d_idx in range(num_days):
+                for h in range(daily_hours[d_idx]):
+                    if d_idx < len(grid_t) and h < len(grid_t[d_idx]) and grid_t[d_idx][h] is not None:
+                        day_has_lessons[d_idx] = True
+                        break
 
-        col_cursor = 4
-        for d_idx in range(num_days):
-            is_day_free = not day_has_lessons[d_idx]
-            
-            # Calcola buchi nel giorno se presente
-            first_l = None
-            last_l = None
-            if not is_day_free:
-                lessons_in_day = [result.grid_by_teacher[t_id][d_idx][hh] is not None for hh in range(daily_hours[d_idx])]
-                first_l = next((idx for idx, val in enumerate(lessons_in_day) if val), None)
-                last_l = next((idx for idx in reversed(range(len(lessons_in_day))) if lessons_in_day[idx]), None)
+            col_cursor = 4
+            for d_idx in range(num_days):
+                is_day_free = not day_has_lessons[d_idx]
+                lessons_in_day = [grid_t[d_idx][hh] is not None for hh in range(daily_hours[d_idx])] if (d_idx < len(grid_t) and not is_day_free) else []
+                first_l = next((idx for idx, val in enumerate(lessons_in_day) if val), None) if lessons_in_day else None
+                last_l = next((idx for idx in reversed(range(len(lessons_in_day))) if lessons_in_day[idx]), None) if lessons_in_day else None
 
-            for h in range(daily_hours[d_idx]):
-                cell = ws_tabellone.cell(row=row_cursor, column=col_cursor)
-                cell.border = thin_border
-                cell.alignment = center_align
+                for h in range(daily_hours[d_idx]):
+                    cell = ws_tabellone.cell(row=row_cursor, column=col_cursor)
+                    cell.border = thin_border
+                    cell.alignment = center_align
 
-                if is_day_free:
-                    cell.value = "LIB"
-                    cell.fill = free_day_fill
-                    cell.font = Font(name="Calibri", size=8, bold=True, color="276A3C")
-                else:
-                    slot_info = result.grid_by_teacher.get(t_id, [])[d_idx][h] if t_id in result.grid_by_teacher else None
-                    if slot_info:
-                        # Mostra Classe, Materia e Aula/Palestra
-                        cell_txt = f"{slot_info.class_name}\n({slot_info.subject_name[:5]})"
-                        clean_r = slot_info.room_name.split("(")[0].strip().replace("ª", "") if getattr(slot_info, "room_name", None) else ""
-                        if clean_r:
-                            cell_txt += f"\n📍{clean_r[:7]}"
-                        if getattr(slot_info, "is_compresenza", False) or getattr(slot_info, "compresenza_text", ""):
-                            cell_txt += "\n👥"
-                        cell.value = cell_txt
-                        cell.font = Font(name="Calibri", size=8.5, bold=True)
+                    if is_day_free:
+                        cell.value = "LIB"
+                        cell.fill = free_day_fill
+                        cell.font = Font(name="Calibri", size=8, bold=True, color="276A3C")
                     else:
-                        # Controlla se è ora buca
-                        if first_l is not None and last_l is not None and first_l < h < last_l:
-                            cell.value = "BUCA"
-                            cell.fill = gap_fill
-                            cell.font = Font(name="Calibri", size=8, bold=True, color="C00000")
+                        slot_info = grid_t[d_idx][h] if (d_idx < len(grid_t) and h < len(grid_t[d_idx])) else None
+                        if slot_info:
+                            clean_c = slot_info.class_name.replace("ª", "").replace(" ", "") if slot_info.class_name else ""
+                            clean_s = slot_info.subject_name.split("(")[0].strip()[:4] if slot_info.subject_name else ""
+                            clean_r = slot_info.room_name.split("(")[0].strip().replace("ª", "").replace("  ", " ") if getattr(slot_info, "room_name", None) else ""
+                            cell_txt = f"{clean_c}\n({clean_s})"
+                            if clean_r:
+                                cell_txt += f"\n📍{clean_r}"
+                            cell.value = cell_txt
+                            cell.font = lesson_font
                         else:
-                            cell.value = "-"
-                            cell.font = sub_font
-                
-                col_cursor += 1
+                            if first_l is not None and last_l is not None and first_l < h < last_l:
+                                cell.value = "BUCA"
+                                cell.fill = gap_fill
+                                cell.font = Font(name="Calibri", size=8, bold=True, color="C00000")
+                            else:
+                                cell.value = "-"
+                                cell.font = sub_font
+                    col_cursor += 1
+        else:
+            # Docente di sostegno
+            sup_grid_t = support_result.grid_by_support_teacher.get(t_id, []) if support_result else []
+            day_has_lessons = [False] * num_days
+            for d_idx in range(num_days):
+                for h in range(daily_hours[d_idx]):
+                    if d_idx < len(sup_grid_t) and h < len(sup_grid_t[d_idx]) and sup_grid_t[d_idx][h]:
+                        day_has_lessons[d_idx] = True
+                        break
 
-        ws_tabellone.row_dimensions[row_cursor].height = 28
+            col_cursor = 4
+            for d_idx in range(num_days):
+                is_day_free = not day_has_lessons[d_idx]
+                lessons_in_day = [bool(sup_grid_t[d_idx][hh]) for hh in range(daily_hours[d_idx])] if (d_idx < len(sup_grid_t) and not is_day_free) else []
+                first_l = next((idx for idx, val in enumerate(lessons_in_day) if val), None) if lessons_in_day else None
+                last_l = next((idx for idx in reversed(range(len(lessons_in_day))) if lessons_in_day[idx]), None) if lessons_in_day else None
+
+                for h in range(daily_hours[d_idx]):
+                    cell = ws_tabellone.cell(row=row_cursor, column=col_cursor)
+                    cell.border = thin_border
+                    cell.alignment = center_align
+
+                    if is_day_free:
+                        cell.value = "LIB"
+                        cell.fill = free_day_fill
+                        cell.font = Font(name="Calibri", size=8, bold=True, color="276A3C")
+                    else:
+                        slots = sup_grid_t[d_idx][h] if (d_idx < len(sup_grid_t) and h < len(sup_grid_t[d_idx])) else []
+                        if slots:
+                            sl = slots[0]
+                            clean_c = sl.class_name.replace("ª", "").replace(" ", "") if sl.class_name else ""
+                            clean_stud = sl.student_name.replace("Alunno ", "")[:8] if sl.student_name else (sl.activity_type.upper() if sl.is_enhancement else "Sost.")
+                            cur_s = sl.curricular_subject_name[:4] if sl.curricular_subject_name else ""
+                            clean_r = sl.room_name.split("(")[0].strip().replace("ª", "").replace("  ", " ") if getattr(sl, "room_name", None) else ""
+                            r_txt = f"\n📍{clean_r}" if clean_r else ""
+                            cell.value = f"{clean_c} ({clean_stud}){r_txt}\n♿ [{cur_s}]"
+                            cell.fill = sup_fill
+                            cell.font = Font(name="Calibri", size=8, bold=True, color="5B21B6")
+                        else:
+                            if first_l is not None and last_l is not None and first_l < h < last_l:
+                                cell.value = "BUCA"
+                                cell.fill = gap_fill
+                                cell.font = Font(name="Calibri", size=8, bold=True, color="C00000")
+                            else:
+                                cell.value = "-"
+                                cell.font = sub_font
+                    col_cursor += 1
+
+        ws_tabellone.row_dimensions[row_cursor].height = 36
         row_cursor += 1
-
-    # Larghezza colonne tabellone
-    ws_tabellone.column_dimensions['A'].width = 28
-    ws_tabellone.column_dimensions['B'].width = 16
-    ws_tabellone.column_dimensions['C'].width = 10
-    for c_i in range(4, col_cursor + 1):
-        ws_tabellone.column_dimensions[get_column_letter(c_i)].width = 9
 
     # -------------------------------------------------------------
     # FOGLIO 2: ORARIO PER CLASSE
@@ -207,8 +247,9 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult)
     current_row = 1
 
     for c_id, school_class in problem.classes.items():
+        clean_c_title = school_class.name.replace("ª", "").replace(" ", "")
         ws_classes.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=num_days + 1)
-        title_text = f"ORARIO CLASSE: {school_class.name}"
+        title_text = f"ORARIO CLASSE: {clean_c_title}"
         if cfg.is_dada:
             title_text += "  [Modello DADA - Aule Disciplinari]"
         title_cell = ws_classes.cell(row=current_row, column=1, value=title_text)
@@ -244,12 +285,14 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult)
                 if h < daily_hours[d_idx]:
                     slot_info = result.grid_by_class.get(c_id, [])[d_idx][h] if c_id in result.grid_by_class else None
                     if slot_info:
-                        text = f"{slot_info.subject_name}\n({slot_info.teacher_name})"
+                        clean_subj_name = slot_info.subject_name.split("(")[0].strip() if slot_info.subject_name else ""
+                        clean_room_name = slot_info.room_name.split("(")[0].strip().replace("ª", "").replace("  ", " ") if slot_info.room_name else ""
+                        text = f"{clean_subj_name}\n({slot_info.teacher_name})"
                         if getattr(slot_info, "is_compresenza", False) or getattr(slot_info, "compresenza_text", ""):
                             c_t = getattr(slot_info, "compresenza_text", "") or "Compresenza"
                             text += f"\n👥 {c_t}"
-                        if slot_info.room_name:
-                            text += f"\n📍 {slot_info.room_name}"
+                        if clean_room_name:
+                            text += f"\n📍 {clean_room_name}"
                         cell.value = text
                         cell.font = lesson_font
                     else:
@@ -270,6 +313,11 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult)
     current_row = 1
 
     for t_id, teacher in problem.teachers.items():
+        t_assignments = [a for a in problem.assignments if a.teacher_id == t_id or t_id in a.co_teacher_ids]
+        tot_hours = sum(a.hours_per_week for a in t_assignments)
+        if tot_hours == 0:
+            continue
+            
         ws_teachers.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=num_days + 1)
         t_title = f"ORARIO: {teacher.name}"
         if teacher.free_day_1:
@@ -348,7 +396,99 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult)
         current_row += 2
 
     # -------------------------------------------------------------
-    # FOGLIO 4: OCCUPAZIONE AULE / DADA
+    # FOGLIO 4: ORARIO DOCENTI SOSTEGNO
+    # -------------------------------------------------------------
+    if support_result and support_result.grid_by_support_teacher:
+        ws_sup_t = wb.create_sheet(title="Orario Docenti Sostegno")
+        current_row = 1
+
+        for t_id, teacher in problem.teachers.items():
+            if t_id not in support_result.grid_by_support_teacher:
+                continue
+            t_grid = support_result.grid_by_support_teacher[t_id]
+            has_hours = any(t_grid[d][h] for d in range(num_days) for h in range(daily_hours[d]))
+            if not has_hours:
+                continue
+
+            tot_sup_h = sum(sa.hours_per_week for sa in problem.support_assignments if sa.teacher_id == t_id)
+            ws_sup_t.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=num_days + 1)
+            t_title = f"ORARIO SOSTEGNO & INCLUSIONE: {teacher.name} ({tot_sup_h} ore)"
+            title_cell = ws_sup_t.cell(row=current_row, column=1, value=t_title)
+            title_cell.font = Font(name="Calibri", size=13, bold=True, color="5B21B6")
+            title_cell.alignment = Alignment(horizontal='left', vertical='center')
+            current_row += 1
+
+            ws_sup_t.cell(row=current_row, column=1, value="Ora").fill = header_fill
+            ws_sup_t.cell(row=current_row, column=1).font = header_font
+            ws_sup_t.cell(row=current_row, column=1).alignment = center_align
+
+            for d_idx, day_name in enumerate(days):
+                col_idx = d_idx + 2
+                cell = ws_sup_t.cell(row=current_row, column=col_idx, value=day_name)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center_align
+            current_row += 1
+
+            day_has_lessons = [False] * num_days
+            for d_idx in range(num_days):
+                for h in range(daily_hours[d_idx]):
+                    if t_grid[d_idx][h]:
+                        day_has_lessons[d_idx] = True
+                        break
+
+            for h in range(max_hours):
+                hour_label_cell = ws_sup_t.cell(row=current_row, column=1, value=f"{h+1}ª Ora")
+                hour_label_cell.fill = day_fill
+                hour_label_cell.font = day_font
+                hour_label_cell.alignment = center_align
+                hour_label_cell.border = thin_border
+
+                for d_idx in range(num_days):
+                    col_idx = d_idx + 2
+                    cell = ws_sup_t.cell(row=current_row, column=col_idx)
+                    cell.border = thin_border
+                    cell.alignment = center_align
+
+                    if h < daily_hours[d_idx]:
+                        if not day_has_lessons[d_idx]:
+                            cell.value = "LIBERO"
+                            cell.fill = free_day_fill
+                            cell.font = Font(name="Calibri", size=10, bold=True, color="276A3C")
+                        else:
+                            slots = t_grid[d_idx][h]
+                            if slots:
+                                sl = slots[0]
+                                stud_txt = f" ({sl.student_name})" if sl.student_name else ""
+                                sub_txt = f"\n📖 {sl.curricular_subject_name}" if sl.curricular_subject_name else ""
+                                cur_t_txt = f" con {sl.curricular_teacher_name}" if sl.curricular_teacher_name else ""
+                                clean_r = sl.room_name.split("(")[0].strip().replace("ª", "").replace("  ", " ") if getattr(sl, "room_name", None) else ""
+                                r_txt = f"\n📍 {clean_r}" if clean_r else ""
+                                cell.value = f"Classe {sl.class_name}{stud_txt}{sub_txt}{cur_t_txt}{r_txt}"
+                                cell.fill = sup_fill
+                                cell.font = Font(name="Calibri", size=9, bold=True, color="5B21B6")
+                            else:
+                                lessons_in_day = [bool(t_grid[d_idx][hh]) for hh in range(daily_hours[d_idx])]
+                                first_lesson = next((idx for idx, val in enumerate(lessons_in_day) if val), None)
+                                last_lesson = next((idx for idx in reversed(range(len(lessons_in_day))) if lessons_in_day[idx]), None)
+                                
+                                if first_lesson is not None and last_lesson is not None and first_lesson < h < last_lesson:
+                                    cell.value = "BUCA"
+                                    cell.fill = gap_fill
+                                    cell.font = Font(name="Calibri", size=9, bold=True, color="C00000")
+                                else:
+                                    cell.value = "-"
+                                    cell.font = sub_font
+                    else:
+                        cell.value = ""
+
+                ws_sup_t.row_dimensions[current_row].height = 42
+                current_row += 1
+
+            current_row += 2
+
+    # -------------------------------------------------------------
+    # FOGLIO 5: OCCUPAZIONE AULE / DADA
     # -------------------------------------------------------------
     if problem.rooms:
         ws_rooms = wb.create_sheet(title="Orario Aule (DADA)")
@@ -450,6 +590,227 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult)
 
     ws_stats.column_dimensions['A'].width = 38
     ws_stats.column_dimensions['B'].width = 28
+
+    wb.save(output)
+    return output.getvalue()
+
+
+def generate_excel_tabellone_combo(problem: TimetableProblem, result: TimetableResult, support_result: Optional[Any] = None) -> bytes:
+    """Genera un file Excel focalizzato esclusivamente sul Tabellone Generale Docenti Combo (1 riga per ciascun docente curricolare e di sostegno)."""
+    output = io.BytesIO()
+    wb = openpyxl.Workbook()
+    ws_tabellone = wb.active
+    ws_tabellone.title = "Tabellone Docenti (Combo)"
+
+    cfg = problem.config
+    num_days = cfg.num_days
+    days = cfg.active_days
+    daily_hours = cfg.daily_hours[:num_days]
+    max_hours = max(daily_hours)
+
+    # Stili
+    header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    sub_header_fill = PatternFill(start_color="2F5597", end_color="2F5597", fill_type="solid")
+    sub_header_font = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+    
+    lesson_font = Font(name="Calibri", size=9.5, bold=True)
+    sub_font = Font(name="Calibri", size=9, italic=True, color="595959")
+    
+    free_day_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
+    gap_fill = PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid")
+    sup_fill = PatternFill(start_color="F3E8FF", end_color="F3E8FF", fill_type="solid")
+    
+    thin_border = Border(
+        left=Side(style='thin', color='BFBFBF'),
+        right=Side(style='thin', color='BFBFBF'),
+        top=Side(style='thin', color='BFBFBF'),
+        bottom=Side(style='thin', color='BFBFBF')
+    )
+    center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+
+    title_text = f"TABELLONE GENERALE ORARIO DOCENTI (CURRICOLARE & SOSTEGNO) - {cfg.school_name.upper()}"
+    ws_tabellone.merge_cells(start_row=1, start_column=1, end_row=1, end_column=3 + num_days * max_hours)
+    t_cell = ws_tabellone.cell(row=1, column=1, value=title_text)
+    t_cell.font = Font(name="Calibri", size=14, bold=True, color="1F4E78")
+    t_cell.alignment = Alignment(horizontal='left', vertical='center')
+
+    # Riga 3: Header Giorni
+    ws_tabellone.cell(row=3, column=1, value="Docente").fill = header_fill
+    ws_tabellone.cell(row=3, column=1).font = header_font
+    ws_tabellone.cell(row=3, column=1).alignment = center_align
+
+    ws_tabellone.cell(row=3, column=2, value="Contratto / Ruolo").fill = header_fill
+    ws_tabellone.cell(row=3, column=2).font = header_font
+    ws_tabellone.cell(row=3, column=2).alignment = center_align
+
+    ws_tabellone.cell(row=3, column=3, value="Tot Ore").fill = header_fill
+    ws_tabellone.cell(row=3, column=3).font = header_font
+    ws_tabellone.cell(row=3, column=3).alignment = center_align
+
+    col_cursor = 4
+    for d_idx, day_name in enumerate(days):
+        h_in_day = daily_hours[d_idx]
+        start_col = col_cursor
+        end_col = col_cursor + h_in_day - 1
+        ws_tabellone.merge_cells(start_row=3, start_column=start_col, end_row=3, end_column=end_col)
+        day_hdr_cell = ws_tabellone.cell(row=3, column=start_col, value=day_name.upper())
+        day_hdr_cell.fill = header_fill
+        day_hdr_cell.font = header_font
+        day_hdr_cell.alignment = center_align
+        col_cursor += h_in_day
+
+    # Riga 4: Sub-Header delle Ore
+    ws_tabellone.cell(row=4, column=1, value="").fill = sub_header_fill
+    ws_tabellone.cell(row=4, column=2, value="").fill = sub_header_fill
+    ws_tabellone.cell(row=4, column=3, value="").fill = sub_header_fill
+    
+    col_cursor = 4
+    for d_idx in range(num_days):
+        for h in range(daily_hours[d_idx]):
+            h_cell = ws_tabellone.cell(row=4, column=col_cursor, value=f"{h+1}ª")
+            h_cell.fill = sub_header_fill
+            h_cell.font = sub_header_font
+            h_cell.alignment = center_align
+            h_cell.border = thin_border
+            col_cursor += 1
+
+    # Righe per ciascun Docente
+    row_cursor = 5
+    for t_id, teacher in problem.teachers.items():
+        t_assignments = [a for a in problem.assignments if a.teacher_id == t_id or t_id in a.co_teacher_ids]
+        tot_cur_h = sum(a.hours_per_week for a in t_assignments)
+        
+        t_sup_assigns = [sa for sa in problem.support_assignments if sa.teacher_id == t_id]
+        t_pot_assigns = [ea for ea in problem.enhancement_assignments if ea.teacher_id == t_id]
+        tot_sup_h = sum(sa.hours_per_week for sa in t_sup_assigns) + sum(ea.hours_per_week for ea in t_pot_assigns)
+        
+        is_support_teacher = tot_sup_h > 0 or "sostegno" in teacher.name.lower()
+        if tot_cur_h == 0 and tot_sup_h == 0:
+            continue
+            
+        tot_hours = tot_cur_h + tot_sup_h
+        is_pt = getattr(teacher, "is_part_time", False) or tot_hours < 15
+        
+        if is_support_teacher:
+            role_label = f"Sostegno PT ({tot_hours}h)" if is_pt else "Sostegno (18h)"
+        else:
+            role_label = f"Curricolare PT ({tot_hours}h)" if is_pt else "Curricolare (18h)"
+
+        c_doc = ws_tabellone.cell(row=row_cursor, column=1, value=teacher.name)
+        c_doc.font = Font(name="Calibri", size=10, bold=True)
+        c_doc.border = thin_border
+        
+        c_cont = ws_tabellone.cell(row=row_cursor, column=2, value=role_label)
+        c_cont.font = Font(name="Calibri", size=9)
+        c_cont.alignment = center_align
+        c_cont.border = thin_border
+        
+        c_tot = ws_tabellone.cell(row=row_cursor, column=3, value=tot_hours)
+        c_tot.font = Font(name="Calibri", size=10, bold=True)
+        c_tot.alignment = center_align
+        c_tot.border = thin_border
+
+        if not is_support_teacher:
+            grid_t = result.grid_by_teacher.get(t_id, [])
+            day_has_lessons = [False] * num_days
+            for d_idx in range(num_days):
+                for h in range(daily_hours[d_idx]):
+                    if d_idx < len(grid_t) and h < len(grid_t[d_idx]) and grid_t[d_idx][h] is not None:
+                        day_has_lessons[d_idx] = True
+                        break
+
+            col_cursor = 4
+            for d_idx in range(num_days):
+                is_day_free = not day_has_lessons[d_idx]
+                lessons_in_day = [grid_t[d_idx][hh] is not None for hh in range(daily_hours[d_idx])] if (d_idx < len(grid_t) and not is_day_free) else []
+                first_l = next((idx for idx, val in enumerate(lessons_in_day) if val), None) if lessons_in_day else None
+                last_l = next((idx for idx in reversed(range(len(lessons_in_day))) if lessons_in_day[idx]), None) if lessons_in_day else None
+
+                for h in range(daily_hours[d_idx]):
+                    cell = ws_tabellone.cell(row=row_cursor, column=col_cursor)
+                    cell.border = thin_border
+                    cell.alignment = center_align
+
+                    if is_day_free:
+                        cell.value = "LIB"
+                        cell.fill = free_day_fill
+                        cell.font = Font(name="Calibri", size=8, bold=True, color="276A3C")
+                    else:
+                        slot_info = grid_t[d_idx][h] if (d_idx < len(grid_t) and h < len(grid_t[d_idx])) else None
+                        if slot_info:
+                            clean_c = slot_info.class_name.replace("ª", "").replace(" ", "") if slot_info.class_name else ""
+                            clean_s = slot_info.subject_name.split("(")[0].strip()[:4] if slot_info.subject_name else ""
+                            clean_r = slot_info.room_name.split("(")[0].strip().replace("ª", "").replace("  ", " ") if getattr(slot_info, "room_name", None) else ""
+                            cell_txt = f"{clean_c}\n({clean_s})"
+                            if clean_r:
+                                cell_txt += f"\n📍{clean_r}"
+                            cell.value = cell_txt
+                            cell.font = lesson_font
+                        else:
+                            if first_l is not None and last_l is not None and first_l < h < last_l:
+                                cell.value = "BUCA"
+                                cell.fill = gap_fill
+                                cell.font = Font(name="Calibri", size=8, bold=True, color="C00000")
+                            else:
+                                cell.value = "-"
+                                cell.font = sub_font
+                    col_cursor += 1
+        else:
+            sup_grid_t = support_result.grid_by_support_teacher.get(t_id, []) if support_result else []
+            day_has_lessons = [False] * num_days
+            for d_idx in range(num_days):
+                for h in range(daily_hours[d_idx]):
+                    if d_idx < len(sup_grid_t) and h < len(sup_grid_t[d_idx]) and sup_grid_t[d_idx][h]:
+                        day_has_lessons[d_idx] = True
+                        break
+
+            col_cursor = 4
+            for d_idx in range(num_days):
+                is_day_free = not day_has_lessons[d_idx]
+                lessons_in_day = [bool(sup_grid_t[d_idx][hh]) for hh in range(daily_hours[d_idx])] if (d_idx < len(sup_grid_t) and not is_day_free) else []
+                first_l = next((idx for idx, val in enumerate(lessons_in_day) if val), None) if lessons_in_day else None
+                last_l = next((idx for idx in reversed(range(len(lessons_in_day))) if lessons_in_day[idx]), None) if lessons_in_day else None
+
+                for h in range(daily_hours[d_idx]):
+                    cell = ws_tabellone.cell(row=row_cursor, column=col_cursor)
+                    cell.border = thin_border
+                    cell.alignment = center_align
+
+                    if is_day_free:
+                        cell.value = "LIB"
+                        cell.fill = free_day_fill
+                        cell.font = Font(name="Calibri", size=8, bold=True, color="276A3C")
+                    else:
+                        slots = sup_grid_t[d_idx][h] if (d_idx < len(sup_grid_t) and h < len(sup_grid_t[d_idx])) else []
+                        if slots:
+                            sl = slots[0]
+                            clean_c = sl.class_name.replace("ª", "").replace(" ", "") if sl.class_name else ""
+                            clean_stud = sl.student_name.replace("Alunno ", "")[:8] if sl.student_name else (sl.activity_type.upper() if sl.is_enhancement else "Sost.")
+                            cur_s = sl.curricular_subject_name[:4] if sl.curricular_subject_name else ""
+                            clean_r = sl.room_name.split("(")[0].strip().replace("ª", "").replace("  ", " ") if getattr(sl, "room_name", None) else ""
+                            r_txt = f"\n📍{clean_r}" if clean_r else ""
+                            cell.value = f"{clean_c} ({clean_stud}){r_txt}\n♿ [{cur_s}]"
+                            cell.fill = sup_fill
+                            cell.font = Font(name="Calibri", size=8, bold=True, color="5B21B6")
+                        else:
+                            if first_l is not None and last_l is not None and first_l < h < last_l:
+                                cell.value = "BUCA"
+                                cell.fill = gap_fill
+                                cell.font = Font(name="Calibri", size=8, bold=True, color="C00000")
+                            else:
+                                cell.value = "-"
+                                cell.font = sub_font
+                    col_cursor += 1
+
+        ws_tabellone.row_dimensions[row_cursor].height = 36
+        row_cursor += 1
+
+    ws_tabellone.column_dimensions['A'].width = 25
+    ws_tabellone.column_dimensions['B'].width = 18
+    ws_tabellone.column_dimensions['C'].width = 9
+    for col_idx in range(4, 4 + num_days * max_hours):
+        ws_tabellone.column_dimensions[get_column_letter(col_idx)].width = 13
 
     wb.save(output)
     return output.getvalue()

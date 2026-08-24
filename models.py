@@ -8,6 +8,29 @@ from typing import List, Dict, Optional, Tuple, Any
 
 DAYS_OF_WEEK = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato"]
 
+DISCIPLINARY_AREAS = {
+    "scientifica": {
+        "label": "📐 Area Scientifica",
+        "subjects": ["mat", "sci", "tec"],
+        "desc": "Matematica, Scienze, Tecnologia"
+    },
+    "umanistica": {
+        "label": "📖 Area Umanistica / Lettere",
+        "subjects": ["ita", "sto", "geo"],
+        "desc": "Italiano, Storia, Geografia"
+    },
+    "artistica": {
+        "label": "🎨 Area Artistico-Espressiva",
+        "subjects": ["art", "mus", "mot", "rel"],
+        "desc": "Arte, Musica, Scienze Motorie, Religione"
+    },
+    "lingue": {
+        "label": "🌍 Area Lingue Straniere",
+        "subjects": ["ing", "spa"],
+        "desc": "Inglese, Seconda Lingua (Spagnolo/Francese)"
+    }
+}
+
 @dataclass
 class Classroom:
     id: str
@@ -22,7 +45,7 @@ class Classroom:
 class Teacher:
     id: str
     name: str
-    cdc: str = ""                          # Classe di Concorso (es. A-22 Lettere, A-28 Mat/Sci, A-24 Lingue, A-60 Tec, A-30 Mus, A-01 Arte, A-48 Mot, Religione)
+    cdc: str = ""                          # Classe di Concorso (es. A-22 Lettere, A-28 Mat/Sci, A-24 Lingue, A-60 Tec, A-30 Mus, A-01 Arte, A-48 Mot, Religione, ADMM Sostegno)
     is_part_time: bool = False             # True se docente part-time o spezzone
     contract_hours: Optional[int] = None   # Monte ore contrattuale dichiarato (es. 6, 9, 12, 14 ore)
     max_working_days: Optional[int] = None # Articolazione: numero MASSIMO di giorni di presenza a scuola (es. max 2 o 3 gg)
@@ -30,6 +53,9 @@ class Teacher:
     free_day_1: Optional[str] = None       # Prima scelta giorno libero preferito (legacy/compatibilità)
     free_day_2: Optional[str] = None       # Seconda scelta giorno libero preferito (legacy/compatibilità)
     free_days: List[str] = field(default_factory=list) # Lista completa giorni liberi preferiti (fino a N giorni per part-time)
+    
+    # Desiderata e Affinità Disciplinari Sostegno
+    preferred_areas: List[str] = field(default_factory=list) # Aree disciplinari preferite per i docenti di sostegno (es. ["scientifica", "umanistica"])
     
     # Vincoli Rigidi (Inderogabili)
     unavailable_slots: List[List[int]] = field(default_factory=list) # Slot [day_idx, hour_idx] vietati al 100% (Escludi)
@@ -43,8 +69,9 @@ class Teacher:
     soft_avoid_slots: List[List[int]] = field(default_factory=list)  # Slot [day_idx, hour_idx] sconsigliati (es. no 1a ora merc)
     
     # Parametri Carico Orario
-    max_daily_hours: int = 5               # Massimo numero di ore in un giorno
-    max_consecutive_hours: int = 4         # Massimo ore consecutive di lezione
+    min_daily_hours: int = 2               # Minimo numero di ore in un giorno se presente (default 2h)
+    max_daily_hours: int = 5               # Massimo numero di ore in un giorno (default 5h)
+    max_consecutive_hours: int = 4         # Massimo ore consecutive di lezione (default 4h)
     max_gap_hours: int = 2                 # Massimo ore buche settimanali tollerate
     prefer_compact_schedule: bool = True   # Preferenza ore compatte (meno buchi possibili)
 
@@ -78,6 +105,36 @@ class TeachingAssignment:
     preferred_room_id: Optional[str] = None # Aula specifica opzionale
     co_teacher_ids: List[str] = field(default_factory=list) # Docenti in compresenza (es. ITP, sostegno)
     pinned_slots: List[List[int]] = field(default_factory=list) # Slot [day_idx, hour_idx] in cui QUESTA lezione (classe+materia) è bloccata/fissata a priori
+
+@dataclass
+class StudentDVA:
+    id: str                                    # Identificativo univoco (es. "stud_1")
+    name: str                                  # Nome o codice alunno (es. "Alunno A.B.")
+    class_id: str                              # Classe di appartenenza (es. "1A")
+    weekly_hours: int = 18                     # Ore settimanali di sostegno assegnate da PEI
+    is_severe_coverage: bool = False           # True = Caso Grave (Non può stare solo, serve sempre copertura continua 1:1)
+    preferred_subjects: List[str] = field(default_factory=list) # Materie prioritarie da coprire (es. ["ita", "mat", "ing"])
+    excluded_subjects: List[str] = field(default_factory=list)  # Materie a bassa priorità / non coperte (es. ["mot", "rel"])
+    preferred_hours: List[int] = field(default_factory=list)    # Slot orari preferiti della giornata (es. prime 4 ore [0, 1, 2, 3])
+    notes: str = ""                            # Eventuali note pedagogiche
+
+@dataclass
+class SupportAssignment:
+    id: str                                    # Identificativo (es. "sa_1")
+    teacher_id: str                            # Docente di sostegno
+    student_id: Optional[str] = None           # Alunno DVA associato (opzionale se assegnato a classe)
+    class_id: str = ""                         # Classe su cui opera
+    hours_per_week: int = 18                   # Ore settimanali assegnate
+    preferred_subject_ids: List[str] = field(default_factory=list) # Materie di affinità/preferite dal docente
+
+@dataclass
+class EnhancementAssignment:
+    id: str                                    # Identificativo (es. "pot_1")
+    teacher_id: str                            # Docente di potenziamento
+    subject_id: str                            # Disciplina / CdC (es. "ita", "mat")
+    hours_per_week: int = 18                   # Ore settimanali di potenziamento
+    target_class_ids: List[str] = field(default_factory=list) # Classi su cui intervenire per compresenze/recupero
+    activity_type: str = "compresenza"         # "compresenza", "recupero", "laboratorio"
 
 @dataclass
 class OptimizationCriteria:
@@ -126,6 +183,7 @@ class SchoolConfig:
     allow_triple_hours_italian: bool = False # Se True, consente fino a 3h di Italiano nello stesso giorno (es. per Tema)
     force_triple_hours_italian: bool = False # Se True a livello di istituto, impone 1 blocco da 3h consecutive di Italiano per tutte le classi
     parallel_groups: List[ParallelGroup] = field(default_factory=list) # Gruppi di Classi Aperte & Parallelismi Didattici
+    support_priority_subjects_double_coverage: List[str] = field(default_factory=lambda: ["ita", "mat", "sci", "ing", "tec"]) # Materie prioritarie per compresenza/doppia copertura sostegno
     optimization_criteria: OptimizationCriteria = field(default_factory=OptimizationCriteria) # Criteri e pesi di ottimizzazione
 
     @property
@@ -144,6 +202,9 @@ class TimetableProblem:
     subjects: Dict[str, Subject] = field(default_factory=dict)
     rooms: Dict[str, Classroom] = field(default_factory=dict)
     assignments: List[TeachingAssignment] = field(default_factory=list)
+    students_dva: Dict[str, StudentDVA] = field(default_factory=dict)
+    support_assignments: List[SupportAssignment] = field(default_factory=list)
+    enhancement_assignments: List[EnhancementAssignment] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -185,6 +246,7 @@ class TimetableProblem:
             allow_triple_hours_italian=cfg_data.get("allow_triple_hours_italian", False),
             force_triple_hours_italian=cfg_data.get("force_triple_hours_italian", False),
             parallel_groups=p_groups,
+            support_priority_subjects_double_coverage=cfg_data.get("support_priority_subjects_double_coverage", ["ita", "mat", "sci", "ing", "tec"]),
             optimization_criteria=opt_criteria
         )
         
@@ -255,11 +317,36 @@ class TimetableProblem:
                 co_teacher_ids=a.get("co_teacher_ids", []),
                 pinned_slots=a.get("pinned_slots", [])
             ))
+
+        students_dva = {}
+        for k, v in data.get("students_dva", {}).items():
+            if isinstance(v, dict):
+                students_dva[k] = StudentDVA(**v)
+            elif isinstance(v, StudentDVA):
+                students_dva[k] = v
+
+        support_assignments = []
+        for sa in data.get("support_assignments", []):
+            if isinstance(sa, dict):
+                support_assignments.append(SupportAssignment(**sa))
+            elif isinstance(sa, SupportAssignment):
+                support_assignments.append(sa)
+
+        enhancement_assignments = []
+        for ea in data.get("enhancement_assignments", []):
+            if isinstance(ea, dict):
+                enhancement_assignments.append(EnhancementAssignment(**ea))
+            elif isinstance(ea, EnhancementAssignment):
+                enhancement_assignments.append(ea)
+
         return cls(
             config=config,
             teachers=teachers,
             classes=classes,
             subjects=subjects,
             rooms=rooms,
-            assignments=assignments
+            assignments=assignments,
+            students_dva=students_dva,
+            support_assignments=support_assignments,
+            enhancement_assignments=enhancement_assignments
         )

@@ -10,7 +10,8 @@ import pandas as pd
 from typing import Tuple, List, Dict, Optional, Any
 from models import (
     SchoolConfig, Teacher, SchoolClass, Subject, Classroom, 
-    TeachingAssignment, TimetableProblem, DAYS_OF_WEEK
+    TeachingAssignment, TimetableProblem, DAYS_OF_WEEK,
+    StudentDVA, SupportAssignment, EnhancementAssignment, ParallelGroup
 )
 
 # Colonne ordinate logicamente: prima i dati della Cattedra, poi i Desiderata del Docente
@@ -750,4 +751,574 @@ def merge_teacher_desiderata_file(file_bytes_or_str: Any, problem: TimetableProb
 
     logs.append(f"✅ Aggiornati i desiderata personali di **{num_updated} docenti** con successo!")
     return num_updated, logs
+
+
+# =============================================================================
+# FILE EXCEL MULTI-FOGLIO UNIFICATO SCUOLA (MASTER WORKBOOK)
+# =============================================================================
+
+def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) -> bytes:
+    """
+    Genera un file Excel multi-foglio unificato (.xlsx) contenente l'intera banca dati
+    della scuola:
+      - 1. Struttura_e_Parametri
+      - 2. Docenti
+      - 3. Classi_e_Aule
+      - 4. Cattedre_Curricolari
+      - 5. Sostegno_e_DVA
+      - 6. Classi_Aperte
+      - 7. Guida_Compilazione
+    """
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        
+        # -------------------------------------------------------------
+        # FOGLIO 1: Struttura_e_Parametri
+        # -------------------------------------------------------------
+        p_cfg = problem.config if problem else SchoolConfig()
+        d_hours_str = ", ".join(str(h) for h in getattr(p_cfg, "daily_hours", [6]*p_cfg.num_days))
+        struct_data = [
+            ["Nome Scuola", p_cfg.school_name, "Nome dell'Istituto Scolastico"],
+            ["Numero Giorni Settimanali", p_cfg.num_days, "5 (Settimana Corta) oppure 6 (Settimana Lunga)"],
+            ["Ore Giornaliere", d_hours_str, "Ore per giorno separate da virgola (es. '6, 6, 6, 6, 6')"],
+            ["Modello DADA", "Si" if getattr(p_cfg, "is_dada", True) else "No", "Si = Aule tematiche DADA; No = Modello tradizionale aule fisse"],
+            ["Seconda Lingua Comunitaria", getattr(p_cfg, "second_language", "Spagnolo"), "Spagnolo, Francese, Tedesco o Personalizzata"],
+            ["Blocchi Rigidi DADA (1-2, 3-4, 5-6)", "Si" if getattr(p_cfg, "is_strict_dada_slots", False) else "No", "Forza spostamenti aule solo agli intervalli"],
+            ["Versione Formato File", "2.0", "Non modificare questo valore"]
+        ]
+        df_struct = pd.DataFrame(struct_data, columns=["Parametro", "Valore", "Descrizione"])
+        df_struct.to_excel(writer, sheet_name="1_Struttura_e_Parametri", index=False)
+
+        # -------------------------------------------------------------
+        # FOGLIO 2: Docenti
+        # -------------------------------------------------------------
+        doc_rows = []
+        if problem and problem.teachers:
+            for t in sorted(problem.teachers.values(), key=lambda x: x.name):
+                # Giorni liberi
+                fl = getattr(t, "free_days", []) or []
+                if not fl:
+                    if getattr(t, "free_day_1", None): fl.append(t.free_day_1)
+                    if getattr(t, "free_day_2", None): fl.append(t.free_day_2)
+                fl_str = ", ".join(fl) if fl else ""
+
+                # Slot sconsigliati
+                soft_strs = []
+                for d_i, h_i in getattr(t, "soft_avoid_slots", []):
+                    if d_i < len(DAYS_OF_WEEK): soft_strs.append(f"{DAYS_OF_WEEK[d_i]} {h_i+1}")
+                soft_s = ", ".join(soft_strs)
+
+                # Slot indisponibili
+                unav_strs = []
+                for d_i, h_i in getattr(t, "unavailable_slots", []):
+                    if d_i < len(DAYS_OF_WEEK): unav_strs.append(f"{DAYS_OF_WEEK[d_i]} {h_i+1}")
+                unav_s = ", ".join(unav_strs)
+
+                doc_rows.append([
+                    t.name,
+                    getattr(t, "cdc", ""),
+                    "Si" if getattr(t, "is_part_time", False) else "No",
+                    getattr(t, "contract_hours", 18),
+                    getattr(t, "max_working_days", 5),
+                    fl_str,
+                    "Si" if getattr(t, "prefer_late_entry", False) else "No",
+                    "Si" if getattr(t, "prefer_early_exit", False) else "No",
+                    getattr(t, "max_daily_hours", 5),
+                    getattr(t, "max_gap_hours", 2),
+                    soft_s,
+                    unav_s
+                ])
+        else:
+            doc_rows = [
+                ["Prof.ssa Bianchi M.", "A-22", "No", 18, 5, "", "No", "Si", 5, 2, "", ""],
+                ["Prof. Verdi G.", "A-28", "No", 18, 5, "", "Si", "No", 5, 1, "", ""],
+                ["Prof.ssa Colombo S.", "A-24", "Si", 12, 3, "Lunedì, Mercoledì", "No", "No", 4, 1, "Mercoledì 1", "Lunedì 6"]
+            ]
+        doc_cols = [
+            "Docente", "CdC", "Part_Time", "Ore_Contratto", "Max_Giorni_Presenza",
+            "Giorni_Liberi", "Entra_Tardi", "Esce_Presto", "Max_Ore_Giorno", "Max_Ore_Buche",
+            "Slot_Sconsigliati", "Slot_Indisponibili"
+        ]
+        df_doc = pd.DataFrame(doc_rows, columns=doc_cols)
+        df_doc.to_excel(writer, sheet_name="2_Docenti", index=False)
+
+        # -------------------------------------------------------------
+        # FOGLIO 3: Classi
+        # -------------------------------------------------------------
+        class_rows = []
+        if problem and problem.classes:
+            for c in sorted(problem.classes.values(), key=lambda x: (x.grade, x.section)):
+                class_rows.append([c.name, c.grade, c.section])
+        else:
+            class_rows = [
+                ["1ª A", 1, "A"],
+                ["2ª A", 2, "A"],
+                ["3ª A", 3, "A"]
+            ]
+        class_cols = ["Classe", "Anno", "Sezione"]
+        df_class = pd.DataFrame(class_rows, columns=class_cols)
+        df_class.to_excel(writer, sheet_name="3_Classi", index=False)
+
+        # -------------------------------------------------------------
+        # FOGLIO 4: Aule_e_Laboratori
+        # -------------------------------------------------------------
+        room_rows = []
+        if problem and problem.rooms:
+            for r in sorted(problem.rooms.values(), key=lambda x: x.name):
+                subs_str = ", ".join(r.subject_ids) if getattr(r, "subject_ids", None) else ""
+                room_rows.append([
+                    r.name,
+                    subs_str,
+                    r.capacity or 1,
+                    r.priority or 1,
+                    "Si" if getattr(r, "is_special_lab", False) else "No"
+                ])
+        else:
+            room_rows = [
+                ["Aula 101 - Lettere A", "ita, sto, geo", 1, 1, "No"],
+                ["Aula 102 - Matematica A", "mat, sci", 1, 1, "No"],
+                ["Palestra 1", "mot", 2, 1, "Si"],
+                ["Laboratorio Scienze", "sci", 1, 1, "Si"]
+            ]
+        room_cols = ["Nome_Aula", "Materie_Assegnate", "Capienza_Classi", "Priorita", "Laboratorio_Speciale"]
+        df_room = pd.DataFrame(room_rows, columns=room_cols)
+        df_room.to_excel(writer, sheet_name="4_Aule_e_Laboratori", index=False)
+
+        # -------------------------------------------------------------
+        # FOGLIO 5: Cattedre_Curricolari
+        # -------------------------------------------------------------
+        assign_rows = []
+        if problem and problem.assignments:
+            sorted_a = sorted(
+                problem.assignments,
+                key=lambda a: (
+                    problem.teachers.get(a.teacher_id).name if a.teacher_id in problem.teachers else "",
+                    problem.classes.get(a.class_id).name if a.class_id in problem.classes else ""
+                )
+            )
+            for a in sorted_a:
+                t = problem.teachers.get(a.teacher_id)
+                c = problem.classes.get(a.class_id)
+                s = problem.subjects.get(a.subject_id)
+                assign_rows.append([
+                    t.name if t else a.teacher_id,
+                    c.name if c else a.class_id,
+                    s.name if s else a.subject_id,
+                    getattr(t, "cdc", "") if t else (getattr(s, "cdc", "") if s else ""),
+                    a.hours_per_week,
+                    "Si" if a.force_double_hours else "No",
+                    a.max_daily_hours or 2
+                ])
+        else:
+            assign_rows = [
+                ["Prof.ssa Bianchi M.", "1ª A", "Italiano", "A-22", 6, "Si", 2],
+                ["Prof.ssa Bianchi M.", "1ª A", "Storia", "A-22", 2, "No", 2],
+                ["Prof. Verdi G.", "1ª A", "Matematica", "A-28", 4, "Si", 2],
+                ["Prof. Verdi G.", "1ª A", "Scienze", "A-28", 2, "No", 2],
+                ["Prof.ssa Colombo S.", "1ª A", "Seconda Lingua (Spagnolo)", "A-24", 2, "No", 2]
+            ]
+        assign_cols = ["Docente", "Classe", "Materia", "CdC", "Ore_Settimanali", "Ore_Doppie", "Max_Ore_Giorno_Materia"]
+        df_assign = pd.DataFrame(assign_rows, columns=assign_cols)
+        df_assign.to_excel(writer, sheet_name="5_Cattedre_Curricolari", index=False)
+
+        # -------------------------------------------------------------
+        # FOGLIO 5: Sostegno_e_DVA
+        # -------------------------------------------------------------
+        sost_rows = []
+        if problem and getattr(problem, "students_dva", None):
+            for st_id, st_obj in sorted(problem.students_dva.items(), key=lambda x: x[1].name):
+                c_name = problem.classes.get(st_obj.class_id).name if st_obj.class_id in problem.classes else st_obj.class_id
+                
+                # Assegnazioni docenti per questo studente
+                sa_list = [sa for sa in getattr(problem, "support_assignments", []) if getattr(sa, "student_id", getattr(sa, "student_dva_id", None)) == st_id]
+                if sa_list:
+                    for sa in sa_list:
+                        t = problem.teachers.get(sa.teacher_id)
+                        t_name = t.name if t else sa.teacher_id
+                        pref_areas = ", ".join(getattr(t, "preferred_areas", [])) if t else ""
+                        sost_rows.append([
+                            st_obj.name,
+                            c_name,
+                            st_obj.weekly_hours,
+                            t_name,
+                            sa.hours_per_week,
+                            pref_areas or "Tutte"
+                        ])
+                else:
+                    sost_rows.append([
+                        st_obj.name,
+                        c_name,
+                        st_obj.weekly_hours,
+                        "",
+                        0,
+                        "Tutte"
+                    ])
+        else:
+            sost_rows = [
+                ["Studente DVA 1 (1ª A)", "1ª A", 9, "Prof. Sostegno 1", 9, "scientifica"],
+                ["Studente DVA 2 (2ª A)", "2ª A", 18, "Prof. Sostegno 2", 18, "umanistica, scientifica"]
+            ]
+        sost_cols = ["Studente_DVA", "Classe", "Ore_Totali_Richieste", "Docente_Sostegno", "Ore_Assegnate", "Aree_Disciplinari_Preferite"]
+        df_sost = pd.DataFrame(sost_rows, columns=sost_cols)
+        df_sost.to_excel(writer, sheet_name="5_Sostegno_e_DVA", index=False)
+
+        # -------------------------------------------------------------
+        # FOGLIO 6: Classi_Aperte_Parallelismi
+        # -------------------------------------------------------------
+        par_rows = []
+        if problem and getattr(problem, "parallel_groups", None):
+            for pg in problem.parallel_groups:
+                c_names = []
+                for cid in pg.class_ids:
+                    c_obj = problem.classes.get(cid)
+                    c_names.append(c_obj.name if c_obj else cid)
+                s_obj = problem.subjects.get(pg.subject_id)
+                s_name = s_obj.name if s_obj else pg.subject_id
+                par_rows.append([
+                    pg.name,
+                    s_name,
+                    ", ".join(c_names),
+                    getattr(pg, "parallel_hours", getattr(pg, "hours_per_week", 2))
+                ])
+        else:
+            par_rows = [
+                ["Parallelismo Seconde - Spagnolo/Francese", "Seconda Lingua", "2ª A, 2ª B", 2]
+            ]
+        par_cols = ["Nome_Gruppo", "Materia", "Classi_Coinvolte", "Ore_Settimanali"]
+        df_par = pd.DataFrame(par_rows, columns=par_cols)
+        df_par.to_excel(writer, sheet_name="6_Classi_Aperte", index=False)
+
+        # -------------------------------------------------------------
+        # FOGLIO 7: Guida_Compilazione
+        # -------------------------------------------------------------
+        guide_rows = [
+            ["Foglio", "Descrizione e Regole di Compilazione"],
+            ["1_Struttura_e_Parametri", "Configura il nome della scuola, se lavori a 5 o 6 giorni, le ore per giorno e il modello DADA."],
+            ["2_Docenti", "Elenco di tutti i docenti. Per i Part-Time indica 'Si' e specifica max giorni di presenza e ore contratto."],
+            ["3_Classi_e_Aule", "Elenco delle classi e dell'aula DADA / laboratorio assegnata come base."],
+            ["4_Cattedre_Curricolari", "Abbinamento Docente-Classe-Materia con monte ore settimanale e preferenza ore doppie consecutive."],
+            ["5_Sostegno_e_DVA", "Elenco studenti con certificazione DVA e docenti di sostegno assegnati con relativo monte ore."],
+            ["6_Classi_Aperte", "Opzionale: definisce materie svolte contemporaneamente a classi aperte (es. opzioni lingue)."],
+            ["Consiglio Operativo", "Puoi modificare i dati su Excel e ricaricare il file su Orario Scolastico Facile con 1 clic per un ripristino totale!"]
+        ]
+        df_guide = pd.DataFrame(guide_rows[1:], columns=guide_rows[0])
+        df_guide.to_excel(writer, sheet_name="7_Guida_Compilazione", index=False)
+
+        # -------------------------------------------------------------
+        # STYLING GRAFICO OPENPYXL PER TUTTI I FOGLI
+        # -------------------------------------------------------------
+        header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid") # Blu Navy Elegante
+        header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        center_align = Alignment(horizontal="center", vertical="center")
+        left_align = Alignment(horizontal="left", vertical="center")
+        thin_border = Border(
+            left=Side(style='thin', color='D9D9D9'),
+            right=Side(style='thin', color='D9D9D9'),
+            top=Side(style='thin', color='D9D9D9'),
+            bottom=Side(style='thin', color='D9D9D9')
+        )
+
+        for sheetname in writer.sheets:
+            ws = writer.sheets[sheetname]
+            max_cols = ws.max_column
+            max_rows = ws.max_row
+
+            for col_idx in range(1, max_cols + 1):
+                cell = ws.cell(row=1, column=col_idx)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center_align
+
+                # Larghezza colonna automatica
+                vals = [str(ws.cell(row=r, column=col_idx).value or "") for r in range(1, max_rows + 1)]
+                max_w = max(len(v) for v in vals) if vals else 10
+                col_letter = get_column_letter(col_idx)
+                ws.column_dimensions[col_letter].width = max(max_w + 4, 16)
+
+            for r in range(2, max_rows + 1):
+                for c in range(1, max_cols + 1):
+                    cell = ws.cell(row=r, column=c)
+                    cell.border = thin_border
+
+    return output.getvalue()
+
+
+def parse_unified_school_excel(file_bytes: bytes, base_config: Optional[SchoolConfig] = None) -> Tuple[TimetableProblem, List[str]]:
+    """
+    Parser intelligente che supporta sia il nuovo formato multi-foglio unificato (.xlsx)
+    sia i file legacy a foglio singolo.
+    """
+    logs = []
+    xl = pd.ExcelFile(io.BytesIO(file_bytes))
+    sheet_names = xl.sheet_names
+
+    # Controlla se è il nuovo formato multi-foglio
+    has_struct = any("struttura" in s.lower() or "1_" in s for s in sheet_names)
+    has_doc = any("docenti" in s.lower() or "2_" in s for s in sheet_names)
+    has_class = any("classi" in s.lower() or "3_" in s for s in sheet_names)
+    has_assign = any("cattedre" in s.lower() or "4_" in s for s in sheet_names)
+
+    if not (has_struct or has_doc or has_assign):
+        # Fallback su parser a foglio singolo
+        df_single = xl.parse(sheet_names[0])
+        return parse_timetable_dataframe(df_single, base_config)
+
+    # 1. Parsing Struttura
+    config = base_config or SchoolConfig()
+    for s in sheet_names:
+        if "struttura" in s.lower() or "1_" in s:
+            df_s = xl.parse(s)
+            if "Parametro" in df_s.columns and "Valore" in df_s.columns:
+                for _, r in df_s.iterrows():
+                    param = str(r["Parametro"]).strip().lower()
+                    val = str(r["Valore"]).strip()
+                    if "nome scuola" in param and val:
+                        config.school_name = val
+                    elif "giorni" in param:
+                        config.num_days = _parse_int(val, default=5)
+                    elif "ore giornaliere" in param and val:
+                        try:
+                            config.daily_hours = [int(x.strip()) for x in val.split(",") if x.strip()]
+                        except:
+                            config.daily_hours = [6] * config.num_days
+                    elif "dada" in param:
+                        config.is_dada = _parse_bool(val)
+                    elif "lingua" in param and val:
+                        config.second_language = val
+                    elif "rigidi" in param:
+                        config.is_strict_dada_slots = _parse_bool(val)
+            logs.append(f"⚙️ Configurazione scuola caricata: **{config.school_name}** ({config.num_days} giorni, DADA: {'Sì' if config.is_dada else 'No'}).")
+            break
+
+    teachers: Dict[str, Teacher] = {}
+    classes: Dict[str, SchoolClass] = {}
+    classrooms: Dict[str, Classroom] = {}
+    subjects: Dict[str, Subject] = {}
+    assignments: List[TeachingAssignment] = []
+    students_dva: Dict[str, StudentDVA] = {}
+    support_assignments: List[SupportAssignment] = []
+    parallel_groups: List[ParallelGroup] = []
+
+    # 2. Parsing Docenti
+    for s in sheet_names:
+        if "docenti" in s.lower() or "2_" in s:
+            df_d = xl.parse(s)
+            for _, r in df_d.iterrows():
+                doc_name = str(r.get("Docente", "")).strip()
+                if not doc_name or doc_name.lower() in ["nan", "none", ""]:
+                    continue
+                t_id = "doc_" + _clean_id(doc_name)
+                is_pt = _parse_bool(r.get("Part_Time", False))
+                c_hours = _parse_int(r.get("Ore_Contratto", 18), default=(12 if is_pt else 18))
+                m_days = _parse_int(r.get("Max_Giorni_Presenza", config.num_days), default=(3 if is_pt else config.num_days))
+                
+                f_days = _parse_free_days(r.get("Giorni_Liberi", ""))
+                late_val = _parse_bool(r.get("Entra_Tardi", False))
+                early_val = _parse_bool(r.get("Esce_Presto", False))
+                mdh = _parse_int(r.get("Max_Ore_Giorno", 5), default=5)
+                mgh = _parse_int(r.get("Max_Ore_Buche", 2), default=2)
+                
+                soft_slots = _parse_slots_str(r.get("Slot_Sconsigliati", ""))
+                unav_slots = _parse_slots_str(r.get("Slot_Indisponibili", ""))
+
+                teachers[t_id] = Teacher(
+                    id=t_id,
+                    name=doc_name,
+                    cdc=str(r.get("CdC", "")).strip() if pd.notna(r.get("CdC", "")) else "",
+                    is_part_time=is_pt,
+                    contract_hours=c_hours,
+                    max_working_days=m_days if is_pt else None,
+                    free_days=f_days,
+                    free_day_1=f_days[0] if f_days else None,
+                    free_day_2=f_days[1] if len(f_days) > 1 else None,
+                    prefer_late_entry=late_val,
+                    prefer_early_exit=early_val,
+                    max_daily_hours=mdh,
+                    max_gap_hours=mgh,
+                    soft_avoid_slots=soft_slots,
+                    unavailable_slots=unav_slots
+                )
+            logs.append(f"👥 Caricati **{len(teachers)} docenti**.")
+            break
+
+    # 3. Parsing Classi
+    for s in sheet_names:
+        if "classi" in s.lower() or "3_" in s:
+            df_c = xl.parse(s)
+            for _, r in df_c.iterrows():
+                c_name = str(r.get("Classe", "")).strip()
+                if not c_name or c_name.lower() in ["nan", "none", ""]:
+                    continue
+                c_id = _clean_id(c_name)
+                grade_v = _parse_int(r.get("Anno", 1), default=1)
+                sec_v = str(r.get("Sezione", "A")).strip()
+                classes[c_id] = SchoolClass(id=c_id, name=c_name, grade=grade_v, section=sec_v)
+            logs.append(f"🏫 Caricate **{len(classes)} classi**.")
+            break
+
+    # 4. Parsing Aule & Ambienti DADA
+    for s in sheet_names:
+        if "aule" in s.lower() or "4_" in s:
+            df_r = xl.parse(s)
+            for _, r in df_r.iterrows():
+                r_name = str(r.get("Nome_Aula", "")).strip()
+                if not r_name or r_name.lower() in ["nan", "none", ""]:
+                    continue
+                r_id = "room_" + _clean_id(r_name)
+                subs_raw = str(r.get("Materie_Assegnate", "")).strip()
+                sub_ids = [x.strip().lower() for x in subs_raw.split(",") if x.strip() and subs_raw.lower() != "nan"]
+                r_cap = _parse_int(r.get("Capienza_Classi", r.get("Capienza_Aula", 1)), default=1)
+                r_prio = _parse_int(r.get("Priorita", 1), default=1)
+                r_spec = _parse_bool(r.get("Laboratorio_Speciale", False))
+                classrooms[r_id] = Classroom(
+                    id=r_id,
+                    name=r_name,
+                    subject_ids=sub_ids,
+                    capacity=r_cap,
+                    priority=r_prio,
+                    is_special_lab=r_spec
+                )
+            logs.append(f"🏛️ Caricati **{len(classrooms)} ambienti e aule DADA**.")
+            break
+
+    # 5. Parsing Cattedre Curricolari
+    for s in sheet_names:
+        if "cattedre" in s.lower() or "curricolari" in s.lower() or "5_" in s:
+            df_a = xl.parse(s)
+            for _, r in df_a.iterrows():
+                t_name = str(r.get("Docente", "")).strip()
+                c_name = str(r.get("Classe", "")).strip()
+                s_name = str(r.get("Materia", "")).strip()
+                if not t_name or not c_name or not s_name or t_name.lower() == "nan":
+                    continue
+                
+                t_id = "doc_" + _clean_id(t_name)
+                if t_id not in teachers:
+                    teachers[t_id] = Teacher(id=t_id, name=t_name)
+                    
+                c_id = _clean_id(c_name)
+                if c_id not in classes:
+                    classes[c_id] = SchoolClass(id=c_id, name=c_name, grade=1, section="A")
+
+                s_id = _clean_id(s_name)
+                if s_id not in subjects:
+                    cdc_v = str(r.get("CdC", "")).strip() if pd.notna(r.get("CdC", "")) else ""
+                    subjects[s_id] = Subject(
+                        id=s_id,
+                        name=s_name,
+                        color=DEFAULT_SUBJECT_COLORS.get(s_id, DEFAULT_SUBJECT_COLORS.get(s_name.lower(), "#3498db")),
+                        cdc=cdc_v
+                    )
+
+                h_val = _parse_int(r.get("Ore_Settimanali", 2), default=2)
+                dbl_val = _parse_bool(r.get("Ore_Doppie", False))
+                max_d = _parse_int(r.get("Max_Ore_Giorno_Materia", 2), default=2)
+
+                a_id = f"a_{c_id}_{s_id}_{t_id}_{len(assignments)}".lower()
+                assignments.append(TeachingAssignment(
+                    id=a_id,
+                    teacher_id=t_id,
+                    class_id=c_id,
+                    subject_id=s_id,
+                    hours_per_week=h_val,
+                    force_double_hours=dbl_val,
+                    max_daily_hours=max_d
+                ))
+            logs.append(f"📚 Caricate **{len(assignments)} cattedre curricolari**.")
+            break
+
+    # 6. Parsing Sostegno e DVA
+    for s in sheet_names:
+        if "sostegno" in s.lower() or "dva" in s.lower() or "6_" in s:
+            df_sost = xl.parse(s)
+            for _, r in df_sost.iterrows():
+                dva_name = str(r.get("Studente_DVA", "")).strip()
+                c_name = str(r.get("Classe", "")).strip()
+                if not dva_name or not c_name or dva_name.lower() == "nan":
+                    continue
+                dva_id = "dva_" + _clean_id(dva_name)
+                c_id = _clean_id(c_name)
+                tot_hrs = _parse_int(r.get("Ore_Totali_Richieste", 9), default=9)
+
+                if dva_id not in students_dva:
+                    students_dva[dva_id] = StudentDVA(
+                        id=dva_id,
+                        name=dva_name,
+                        class_id=c_id,
+                        weekly_hours=tot_hrs
+                    )
+
+                doc_sost = str(r.get("Docente_Sostegno", "")).strip()
+                assign_hrs = _parse_int(r.get("Ore_Assegnate", tot_hrs), default=tot_hrs)
+                if doc_sost and doc_sost.lower() not in ["nan", "none", ""]:
+                    t_id = "doc_" + _clean_id(doc_sost)
+                    if t_id not in teachers:
+                        teachers[t_id] = Teacher(id=t_id, name=doc_sost, cdc="ADMM Sostegno")
+                    
+                    pref_areas = []
+                    if pd.notna(r.get("Aree_Disciplinari_Preferite", "")):
+                        pref_areas = [x.strip().lower() for x in str(r.get("Aree_Disciplinari_Preferite")).split(",") if x.strip()]
+                    teachers[t_id].preferred_areas = pref_areas or ["umanistica", "scientifica"]
+
+                    sa_id = f"sa_{dva_id}_{t_id}_{len(support_assignments)}"
+                    support_assignments.append(SupportAssignment(
+                        id=sa_id,
+                        teacher_id=t_id,
+                        student_id=dva_id,
+                        class_id=c_id,
+                        hours_per_week=assign_hrs
+                    ))
+            if students_dva:
+                logs.append(f"🤝 Caricati **{len(students_dva)} studenti DVA** e **{len(support_assignments)} abbinamenti sostegno**.")
+            break
+
+    # 7. Parsing Classi Aperte / Parallelismi
+    for s in sheet_names:
+        if "parallel" in s.lower() or "classi_aperte" in s.lower() or "7_" in s:
+            df_p = xl.parse(s)
+            for _, r in df_p.iterrows():
+                grp_name = str(r.get("Nome_Gruppo", "")).strip()
+                sub_name = str(r.get("Materia", "")).strip()
+                cls_str = str(r.get("Classi_Coinvolte", "")).strip()
+                if not grp_name or not cls_str or grp_name.lower() == "nan":
+                    continue
+                grp_id = "pg_" + _clean_id(grp_name)
+                s_id = _clean_id(sub_name) if sub_name else "seconda_lingua"
+                
+                cls_ids = []
+                for c_item in re.split(r'[,;/|]+', cls_str):
+                    c_cl = c_item.strip()
+                    if c_cl:
+                        cls_ids.append(_clean_id(c_cl))
+
+                h_val = _parse_int(r.get("Ore_Settimanali", 2), default=2)
+                parallel_groups.append(ParallelGroup(
+                    id=grp_id,
+                    name=grp_name,
+                    subject_id=s_id,
+                    class_ids=cls_ids,
+                    parallel_hours=h_val
+                ))
+            if parallel_groups:
+                logs.append(f"🔀 Caricati **{len(parallel_groups)} gruppi a classi aperte / parallelismi**.")
+            break
+
+    config.parallel_groups = parallel_groups
+    prob = TimetableProblem(
+        config=config,
+        teachers=teachers,
+        classes=classes,
+        subjects=subjects,
+        rooms=classrooms,
+        assignments=assignments,
+        students_dva=students_dva,
+        support_assignments=support_assignments
+    )
+
+    logs.append(f"🎉 **Importazione Unificata Completata con successo!** Totale: **{len(teachers)} docenti**, **{len(classes)} classi**, **{len(assignments)} cattedre curricolari**.")
+    return prob, logs
+
 

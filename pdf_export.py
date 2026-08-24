@@ -1,6 +1,6 @@
 # PDF export module
 import io
-from typing import List, Optional
+from typing import List, Optional, Any
 from models import TimetableProblem
 from solver import TimetableResult
 
@@ -62,15 +62,38 @@ def _render_single_sheet_grid(title_main: str, subtitle_info: str, school_name: 
             slot = grid_matrix[d_idx][h] if (d_idx < len(grid_matrix) and h < len(grid_matrix[d_idx])) else None
             if slot is not None:
                 accent_c = getattr(slot, 'subject_color', '#0284c7') or '#0284c7'
-                clean_c = slot.class_name.replace(' ', '') if slot.class_name else ''
-                clean_s = slot.subject_name.split('(')[0].strip() if slot.subject_name else ''
-                clean_r = slot.room_name.split('(')[0].strip() if getattr(slot, 'room_name', None) else ''
+                clean_c = getattr(slot, 'class_name', '').replace('ª', '').replace(' ', '') if getattr(slot, 'class_name', None) else ''
+                clean_s = getattr(slot, 'subject_name', '').split('(')[0].strip() if getattr(slot, 'subject_name', None) else ''
+                clean_r = getattr(slot, 'room_name', '').split('(')[0].strip().replace('ª', '').replace('  ', ' ') if getattr(slot, 'room_name', None) else ''
                 room_badge = f'<div class="badge-room">{clean_r}</div>' if clean_r else ''
                 comp_badge = ''
                 if getattr(slot, 'is_compresenza', False) or getattr(slot, 'compresenza_text', ''):
                     ct = getattr(slot, 'compresenza_text', '') or 'Compresenza'
                     comp_badge = f'<div class="badge-comp">{ct}</div>'
-                if view_type == 'teacher':
+                
+                if view_type == 'support_teacher':
+                    stud_txt = f"♿ {slot.student_name}" if getattr(slot, 'student_name', None) else (f"[{slot.activity_type.upper()}]" if getattr(slot, 'is_enhancement', False) else "Sostegno")
+                    sub_cur = f"📖 {slot.curricular_subject_name}" if getattr(slot, 'curricular_subject_name', None) else ""
+                    cur_t = f"👤 con {slot.curricular_teacher_name}" if getattr(slot, 'curricular_teacher_name', None) else ""
+                    card_body = f'<div class="cell-content" style="border-left: 4px solid #8b5cf6;"><div><div style="font-weight: 700; color: #0f172a; font-size: 12px;">Classe {clean_c}</div><div style="color: #6b21a8; font-size: 10.5px; font-weight: 700; margin-top: 1px;">{stud_txt}</div><div style="color: #475569; font-size: 10px; margin-top: 2px;">{sub_cur} {cur_t}</div></div><div>{room_badge}</div></div>'
+                elif view_type == 'class_with_support':
+                    cur_sl = slot.get('curricular') if isinstance(slot, dict) else slot
+                    sup_list = slot.get('support', []) if isinstance(slot, dict) else []
+                    
+                    c_s = getattr(cur_sl, 'subject_name', '').split('(')[0].strip() if cur_sl else ''
+                    c_t = getattr(cur_sl, 'teacher_name', '') if cur_sl else ''
+                    c_r = getattr(cur_sl, 'room_name', '').split('(')[0].strip() if getattr(cur_sl, 'room_name', None) else ''
+                    r_bdg = f'<div class="badge-room">{c_r}</div>' if c_r else ''
+                    
+                    sup_badges = ''
+                    for s_item in sup_list:
+                        st_name = getattr(s_item, 'teacher_name', '')
+                        st_stud = getattr(s_item, 'student_name', '')
+                        stud_info = f" ({st_stud})" if st_stud else ""
+                        sup_badges += f'<div style="background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; border-radius: 4px; padding: 1px 4px; font-size: 8.5px; font-weight: 700; margin-top: 2px;">♿ {st_name}{stud_info}</div>'
+                        
+                    card_body = f'<div class="cell-content" style="border-left: 4px solid {accent_c};"><div><div style="font-weight: 700; color: #0f172a; font-size: 11.5px;">{c_s}</div><div style="color: #475569; font-size: 10.5px; margin-top: 1px; font-weight: 500;">{c_t}</div></div><div>{r_bdg}{sup_badges}</div></div>'
+                elif view_type == 'teacher':
                     card_body = f'<div class="cell-content" style="border-left: 4px solid {accent_c};"><div><div style="font-weight: 700; color: #0f172a; font-size: 12px;">Classe {clean_c}</div><div style="color: #475569; font-size: 11px; margin-top: 1px; font-weight: 500;">{clean_s}</div></div><div>{room_badge}{comp_badge}</div></div>'
                 elif view_type == 'class':
                     card_body = f'<div class="cell-content" style="border-left: 4px solid {accent_c};"><div><div style="font-weight: 700; color: #0f172a; font-size: 12px;">{clean_s}</div><div style="color: #475569; font-size: 11px; margin-top: 1px; font-weight: 500;">{slot.teacher_name}</div></div><div>{room_badge}{comp_badge}</div></div>'
@@ -78,8 +101,8 @@ def _render_single_sheet_grid(title_main: str, subtitle_info: str, school_name: 
                     card_body = f'<div class="cell-content" style="border-left: 4px solid {accent_c};"><div><div style="font-weight: 700; color: #0f172a; font-size: 12px;">Classe {clean_c}</div><div style="color: #475569; font-size: 11px; margin-top: 1px; font-weight: 500;">{clean_s}</div><div style="color: #64748b; font-size: 10px;">{slot.teacher_name}</div></div><div>{comp_badge}</div></div>'
                 cells_html += f'<td>{card_body}</td>'
             else:
-                if view_type == 'teacher':
-                    day_lessons = [slot is not None for slot in grid_matrix[d_idx]]
+                if view_type in ('teacher', 'support_teacher'):
+                    day_lessons = [grid_matrix[d_idx][hh] is not None for hh in range(daily_hours[d_idx])]
                     first_l = next((idx for idx, val in enumerate(day_lessons) if val), None)
                     last_l = next((idx for idx in reversed(range(len(day_lessons))) if day_lessons[idx]), None)
                     if first_l is not None and last_l is not None and first_l < h < last_l:
@@ -106,7 +129,8 @@ def generate_classes_pdf(problem: TimetableProblem, result: TimetableResult) -> 
     for c_id, c_obj in problem.classes.items():
         if c_id in result.grid_by_class:
             grid = result.grid_by_class[c_id]
-            title = f'Orario Settimanale - Classe {c_obj.name}'
+            clean_c = c_obj.name.replace('ª', '').replace(' ', '')
+            title = f'Orario Settimanale - Classe {clean_c}'
             sub = 'Modello DADA - Aule Disciplinari' if problem.config.is_dada else 'Anno Scolastico 2026/2027'
             pages.append(_render_single_sheet_grid(title, sub, school_name, days_active, daily_hours, grid, view_type='class'))
     full_html = _build_html_document(f'Orario Classi - {school_name}', pages)
@@ -119,8 +143,24 @@ def generate_teachers_pdf(problem: TimetableProblem, result: TimetableResult) ->
     num_days = problem.config.num_days
     pages = []
     for t_id, t_obj in problem.teachers.items():
+        is_sostegno = (
+            "sostegno" in t_obj.name.lower() or 
+            "sostegno" in getattr(t_obj, "cdc", "").lower() or 
+            "admm" in getattr(t_obj, "cdc", "").lower()
+        )
+        if is_sostegno:
+            continue
+            
+        t_assignments = [a for a in problem.assignments if a.teacher_id == t_id]
+        if not t_assignments or sum(a.hours_per_week for a in t_assignments) == 0:
+            continue
+
         if t_id in result.grid_by_teacher:
             grid = result.grid_by_teacher[t_id]
+            has_curricular_lessons = any(grid[d][h] is not None for d in range(num_days) for h in range(daily_hours[d]))
+            if not has_curricular_lessons:
+                continue
+                
             day_has_lessons = [False] * num_days
             for d_idx in range(num_days):
                 for h in range(daily_hours[d_idx]):
@@ -132,6 +172,92 @@ def generate_teachers_pdf(problem: TimetableProblem, result: TimetableResult) ->
             sub = f"{getattr(t_obj, 'cdc', 'Docente') or 'Docente'} | {free_info}"
             pages.append(_render_single_sheet_grid(title, sub, school_name, days_active, daily_hours, grid, view_type='teacher', day_has_lessons=day_has_lessons))
     full_html = _build_html_document(f'Orario Docenti - {school_name}', pages)
+    return generate_pdf_from_html(full_html)
+
+def generate_support_teachers_pdf(problem: TimetableProblem, curricular_result: Optional[Any], support_result: Optional[Any]) -> bytes:
+    """Genera il PDF per i docenti di sostegno e potenziamento con layout grafico completo."""
+    if not support_result:
+        return b''
+    days_active = problem.config.active_days
+    daily_hours = problem.config.daily_hours[:problem.config.num_days]
+    school_name = problem.config.school_name
+    num_days = problem.config.num_days
+    pages = []
+    
+    for t_id, t_obj in problem.teachers.items():
+        if t_id not in support_result.grid_by_support_teacher:
+            continue
+            
+        grid_raw = support_result.grid_by_support_teacher[t_id]
+        has_active_hours = any(grid_raw[d][h] for d in range(num_days) for h in range(daily_hours[d]))
+        if not has_active_hours:
+            continue
+            
+        # Costruisci griglia con singolo slot
+        grid = []
+        for d in range(num_days):
+            day_row = []
+            for h in range(daily_hours[d]):
+                slots = grid_raw[d][h]
+                day_row.append(slots[0] if slots else None)
+            grid.append(day_row)
+            
+        day_has_lessons = [False] * num_days
+        for d_idx in range(num_days):
+            for h in range(daily_hours[d_idx]):
+                if grid[d_idx][h] is not None:
+                    day_has_lessons[d_idx] = True
+                    break
+                    
+        title = f'Orario Settimanale Sostegno - {t_obj.name}'
+        tot_h = sum(sa.hours_per_week for sa in problem.support_assignments if sa.teacher_id == t_id)
+        sub = f"Docente di Sostegno & Inclusione | Cattedra {tot_h}h"
+        pages.append(_render_single_sheet_grid(title, sub, school_name, days_active, daily_hours, grid, view_type='support_teacher', day_has_lessons=day_has_lessons))
+        
+    full_html = _build_html_document(f'Orario Docenti Sostegno - {school_name}', pages)
+    return generate_pdf_from_html(full_html)
+
+def generate_classes_with_support_pdf(problem: TimetableProblem, curricular_result: Optional[Any], support_result: Optional[Any]) -> bytes:
+    """Genera il PDF per le classi con l'orario curricolare integrato con i docenti di sostegno."""
+    if not curricular_result:
+        return b''
+    days_active = problem.config.active_days
+    daily_hours = problem.config.daily_hours[:problem.config.num_days]
+    school_name = problem.config.school_name
+    num_days = problem.config.num_days
+    pages = []
+    
+    for c_id, c_obj in problem.classes.items():
+        if c_id not in curricular_result.grid_by_class:
+            continue
+            
+        c_cur_grid = curricular_result.grid_by_class[c_id]
+        c_sup_grid = support_result.grid_by_class_support.get(c_id, []) if support_result else []
+        
+        grid = []
+        for d in range(num_days):
+            day_row = []
+            for h in range(daily_hours[d]):
+                cur_slot = c_cur_grid[d][h] if d < len(c_cur_grid) and h < len(c_cur_grid[d]) else None
+                sup_slots = c_sup_grid[d][h] if d < len(c_sup_grid) and h < len(c_sup_grid[d]) else []
+                
+                if cur_slot is not None or sup_slots:
+                    combined = {
+                        'curricular': cur_slot,
+                        'support': sup_slots,
+                        'subject_color': getattr(cur_slot, 'subject_color', '#0284c7') if cur_slot else '#8b5cf6'
+                    }
+                    day_row.append(combined)
+                else:
+                    day_row.append(None)
+            grid.append(day_row)
+            
+        clean_c = c_obj.name.replace('ª', '').replace(' ', '')
+        title = f'Orario Integrato & Inclusione - Classe {clean_c}'
+        sub = 'Orario Curricolare Ufficiale con Docenti di Sostegno e Compresenze'
+        pages.append(_render_single_sheet_grid(title, sub, school_name, days_active, daily_hours, grid, view_type='class_with_support'))
+        
+    full_html = _build_html_document(f'Orario Classi Integrato Sostegno - {school_name}', pages)
     return generate_pdf_from_html(full_html)
 
 def generate_rooms_pdf(problem: TimetableProblem, result: TimetableResult) -> bytes:
