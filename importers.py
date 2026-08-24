@@ -968,12 +968,17 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
                         t_name = t.name if t else sa.teacher_id
                         pref_areas = ", ".join(getattr(t, "preferred_areas", [])) if t else ""
                         
-                        # Desiderata docente sostegno
+                        # Parametri contrattuali e desiderata completi docente sostegno
+                        is_pt = "Si" if getattr(t, "is_part_time", False) else "No"
+                        ch = getattr(t, "contract_hours", 18) or 18
+                        max_d = getattr(t, "max_working_days", 5) if is_pt == "Si" else 5
+                        m_day = getattr(t, "max_daily_hours", 5) or 5
+                        m_gap = getattr(t, "max_gap_hours", 2) if t else 2
+                        
                         fl = getattr(t, "free_days", []) or []
                         fl_str = ", ".join(fl) if fl else ""
                         late_str = "Si" if (t and getattr(t, "prefer_late_entry", False)) else "No"
                         early_str = "Si" if (t and getattr(t, "prefer_early_exit", False)) else "No"
-                        m_gap = getattr(t, "max_gap_hours", 2) if t else 2
                         
                         unav_strs = []
                         if t and getattr(t, "unavailable_slots", []):
@@ -988,10 +993,14 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
                             t_name,
                             sa.hours_per_week,
                             pref_areas or "Tutte",
+                            is_pt,
+                            ch,
+                            max_d,
+                            m_day,
+                            m_gap,
                             fl_str,
                             late_str,
                             early_str,
-                            m_gap,
                             unav_s
                         ])
                 else:
@@ -1002,20 +1011,25 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
                         "",
                         0,
                         "Tutte",
+                        "No",
+                        18,
+                        5,
+                        5,
+                        2,
                         "",
                         "No",
                         "No",
-                        2,
                         ""
                     ])
         else:
             sost_rows = [
-                ["Alunno Rossi M. (1ª A)", "1ª A", 9, "Prof. Gentile (Sostegno 18h)", 9, "scientifica", "", "No", "No", 2, ""],
-                ["Alunno Bianchi F. (2ª A)", "2ª A", 18, "Prof. Marini (Sostegno 18h)", 18, "umanistica, scientifica", "Mercoledì", "Si", "No", 1, "Venerdì 6"]
+                ["Alunno Rossi M. (1ª A)", "1ª A", 9, "Prof. Gentile (Sostegno 18h)", 9, "scientifica", "No", 18, 5, 5, 2, "", "No", "No", ""],
+                ["Alunno Bianchi F. (2ª A)", "2ª A", 18, "Prof. Marini (Sostegno 18h)", 18, "umanistica, scientifica", "Si", 12, 3, 4, 1, "Mercoledì", "Si", "No", "Venerdì 6"]
             ]
         sost_cols = [
             "Studente_DVA", "Classe", "Ore_Totali_Richieste", "Docente_Sostegno", "Ore_Assegnate", 
-            "Aree_Disciplinari_Preferite", "Giorni_Liberi_Docente", "Entra_Tardi", "Esce_Presto", "Max_Ore_Buche", "Slot_Indisponibili"
+            "Aree_Disciplinari_Preferite", "Part_Time", "Ore_Contratto", "Max_Giorni_Presenza",
+            "Max_Ore_Giorno", "Max_Ore_Buche", "Giorni_Liberi_Docente", "Entra_Tardi", "Esce_Presto", "Slot_Indisponibili"
         ]
         df_sost = pd.DataFrame(sost_rows, columns=sost_cols)
         df_sost.to_excel(writer, sheet_name="5_Sostegno_e_DVA", index=False)
@@ -1351,7 +1365,16 @@ def parse_unified_school_excel(file_bytes: bytes, base_config: Optional[SchoolCo
                         pref_areas = [x.strip().lower() for x in str(r.get("Aree_Disciplinari_Preferite")).split(",") if x.strip()]
                     teachers[t_id].preferred_areas = pref_areas or ["umanistica", "scientifica"]
 
-                    # Carica desiderata specifici del docente di sostegno se presenti
+                    # Carica parametri contrattuali e desiderata completi del docente di sostegno
+                    if "Part_Time" in r and pd.notna(r["Part_Time"]):
+                        is_pt_val = _parse_bool(r["Part_Time"])
+                        teachers[t_id].is_part_time = is_pt_val
+                    if "Ore_Contratto" in r and pd.notna(r["Ore_Contratto"]):
+                        teachers[t_id].contract_hours = _parse_int(r["Ore_Contratto"], default=18)
+                    if "Max_Giorni_Presenza" in r and pd.notna(r["Max_Giorni_Presenza"]):
+                        teachers[t_id].max_working_days = _parse_int(r["Max_Giorni_Presenza"], default=config.num_days)
+                    if "Max_Ore_Giorno" in r and pd.notna(r["Max_Ore_Giorno"]):
+                        teachers[t_id].max_daily_hours = _parse_int(r["Max_Ore_Giorno"], default=5)
                     if "Giorni_Liberi_Docente" in r and pd.notna(r["Giorni_Liberi_Docente"]):
                         f_days = _parse_free_days(r["Giorni_Liberi_Docente"])
                         teachers[t_id].free_days = f_days
