@@ -960,6 +960,18 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
             for st_id, st_obj in sorted(problem.students_dva.items(), key=lambda x: x[1].name):
                 c_name = problem.classes.get(st_obj.class_id).name if st_obj.class_id in problem.classes else st_obj.class_id
                 
+                # Dati alunno DVA
+                is_grave_str = "Si" if getattr(st_obj, "is_severe_coverage", False) else "No"
+                
+                # Materie preferite da coprire per l'alunno (converte id in nomi leggibili es. ita, mat -> Italiano, Matematica)
+                sub_names = []
+                for sid in getattr(st_obj, "preferred_subjects", []):
+                    if sid in problem.subjects:
+                        sub_names.append(problem.subjects[sid].name)
+                    else:
+                        sub_names.append(sid)
+                mat_coperte_str = ", ".join(sub_names) if sub_names else "Tutte le discipline"
+
                 # Assegnazioni docenti per questo studente
                 sa_list = [sa for sa in getattr(problem, "support_assignments", []) if getattr(sa, "student_id", getattr(sa, "student_dva_id", None)) == st_id]
                 if sa_list:
@@ -990,6 +1002,8 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
                             st_obj.name,
                             c_name,
                             st_obj.weekly_hours,
+                            is_grave_str,
+                            mat_coperte_str,
                             t_name,
                             sa.hours_per_week,
                             pref_areas or "Tutte",
@@ -1008,6 +1022,8 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
                         st_obj.name,
                         c_name,
                         st_obj.weekly_hours,
+                        is_grave_str,
+                        mat_coperte_str,
                         "",
                         0,
                         "Tutte",
@@ -1023,13 +1039,13 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
                     ])
         else:
             sost_rows = [
-                ["Alunno Rossi M. (1ª A)", "1ª A", 9, "Prof. Gentile (Sostegno 18h)", 9, "scientifica", "No", 18, 5, 5, 2, "", "No", "No", ""],
-                ["Alunno Bianchi F. (2ª A)", "2ª A", 18, "Prof. Marini (Sostegno 18h)", 18, "umanistica, scientifica", "Si", 12, 3, 4, 1, "Mercoledì", "Si", "No", "Venerdì 6"]
+                ["Alunno Rossi M. (1ª A)", "1ª A", 9, "No", "Matematica, Scienze", "Prof. Gentile (Sostegno 18h)", 9, "scientifica", "No", 18, 5, 5, 2, "", "No", "No", ""],
+                ["Alunno Bianchi F. (2ª A)", "2ª A", 18, "Si", "Italiano, Storia, Matematica", "Prof. Marini (Sostegno 18h)", 18, "umanistica, scientifica", "Si", 12, 3, 4, 1, "Mercoledì", "Si", "No", "Venerdì 6"]
             ]
         sost_cols = [
-            "Studente_DVA", "Classe", "Ore_Totali_Richieste", "Docente_Sostegno", "Ore_Assegnate", 
-            "Aree_Disciplinari_Preferite", "Part_Time", "Ore_Contratto", "Max_Giorni_Presenza",
-            "Max_Ore_Giorno", "Max_Ore_Buche", "Giorni_Liberi_Docente", "Entra_Tardi", "Esce_Presto", "Slot_Indisponibili"
+            "Studente_DVA", "Classe", "Ore_Totali_Richieste", "Gravita_Caso_Grave", "Materie_Da_Coprire",
+            "Docente_Sostegno", "Ore_Assegnate", "Aree_Disciplinari_Preferite", "Part_Time", "Ore_Contratto", 
+            "Max_Giorni_Presenza", "Max_Ore_Giorno", "Max_Ore_Buche", "Giorni_Liberi_Docente", "Entra_Tardi", "Esce_Presto", "Slot_Indisponibili"
         ]
         df_sost = pd.DataFrame(sost_rows, columns=sost_cols)
         df_sost.to_excel(writer, sheet_name="5_Sostegno_e_DVA", index=False)
@@ -1345,13 +1361,50 @@ def parse_unified_school_excel(file_bytes: bytes, base_config: Optional[SchoolCo
                 c_id = _clean_id(c_name)
                 tot_hrs = _parse_int(r.get("Ore_Totali_Richieste", 9), default=9)
 
+                # Gravità e Materie da coprire
+                is_grave = _parse_bool(r.get("Gravita_Caso_Grave", r.get("Gravita", False)))
+                
+                pref_sub_ids = []
+                raw_subs = str(r.get("Materie_Da_Coprire", r.get("Materie", ""))).strip()
+                if raw_subs and raw_subs.lower() not in ["nan", "none", "tutte", "tutte le discipline", ""]:
+                    for item in raw_subs.split(","):
+                        item_clean = item.strip().lower()
+                        if not item_clean: continue
+                        # Cerca corrispondenza nelle materie
+                        matched_s = None
+                        for s_k, s_obj in subjects.items():
+                            if s_obj.name.lower() == item_clean or s_k.lower() == item_clean:
+                                matched_s = s_k
+                                break
+                        if matched_s:
+                            pref_sub_ids.append(matched_s)
+                        else:
+                            # mapping euristico rapido
+                            if "ita" in item_clean or "lettere" in item_clean: pref_sub_ids.append("ita")
+                            elif "mat" in item_clean: pref_sub_ids.append("mat")
+                            elif "sci" in item_clean: pref_sub_ids.append("sci")
+                            elif "ing" in item_clean: pref_sub_ids.append("ing")
+                            elif "sto" in item_clean: pref_sub_ids.append("sto")
+                            elif "geo" in item_clean: pref_sub_ids.append("geo")
+                            elif "tec" in item_clean: pref_sub_ids.append("tec")
+                            elif "art" in item_clean: pref_sub_ids.append("art")
+                            elif "mus" in item_clean: pref_sub_ids.append("mus")
+                            elif "mot" in item_clean: pref_sub_ids.append("mot")
+
                 if dva_id not in students_dva:
                     students_dva[dva_id] = StudentDVA(
                         id=dva_id,
                         name=dva_name,
                         class_id=c_id,
-                        weekly_hours=tot_hrs
+                        weekly_hours=tot_hrs,
+                        is_severe_coverage=is_grave,
+                        preferred_subjects=pref_sub_ids
                     )
+                else:
+                    if is_grave:
+                        students_dva[dva_id].is_severe_coverage = True
+                    if pref_sub_ids:
+                        students_dva[dva_id].preferred_subjects = list(set(students_dva[dva_id].preferred_subjects + pref_sub_ids))
 
                 doc_sost = str(r.get("Docente_Sostegno", "")).strip()
                 assign_hrs = _parse_int(r.get("Ore_Assegnate", tot_hrs), default=tot_hrs)
