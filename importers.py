@@ -869,21 +869,29 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
         if problem and problem.rooms:
             for r in sorted(problem.rooms.values(), key=lambda x: x.name):
                 subs_str = ", ".join(r.subject_ids) if getattr(r, "subject_ids", None) else ""
+                t_names = []
+                for tid in getattr(r, "teacher_ids", []):
+                    if tid in problem.teachers:
+                        t_names.append(problem.teachers[tid].name)
+                    else:
+                        t_names.append(tid)
+                t_str = ", ".join(t_names) if t_names else ""
                 room_rows.append([
                     r.name,
                     subs_str,
                     r.capacity or 1,
                     r.priority or 1,
-                    "Si" if getattr(r, "is_special_lab", False) else "No"
+                    "Si" if getattr(r, "is_special_lab", False) else "No",
+                    t_str
                 ])
         else:
             room_rows = [
-                ["Aula 101 - Lettere A", "ita, sto, geo", 1, 1, "No"],
-                ["Aula 102 - Matematica A", "mat, sci", 1, 1, "No"],
-                ["Palestra 1", "mot", 2, 1, "Si"],
-                ["Laboratorio Scienze", "sci", 1, 1, "Si"]
+                ["Aula 101 - Lettere A", "ita, sto, geo", 1, 1, "No", "Prof. Valenti S., Prof.ssa Montanari G."],
+                ["Aula 102 - Matematica A", "mat, sci", 1, 1, "No", "Prof. Marchetti E."],
+                ["Palestra 1", "mot", 2, 1, "Si", "Prof.ssa Rossetti M., Prof.ssa Leone P."],
+                ["Laboratorio Scienze", "sci", 1, 1, "Si", "Prof. Serra G."]
             ]
-        room_cols = ["Nome_Aula", "Materie_Assegnate", "Capienza_Classi", "Priorita", "Laboratorio_Speciale"]
+        room_cols = ["Nome_Aula", "Materie_Assegnate", "Capienza_Classi", "Priorita", "Laboratorio_Speciale", "Docenti_Assegnati"]
         df_room = pd.DataFrame(room_rows, columns=room_cols)
         df_room.to_excel(writer, sheet_name="4_Aule_e_Laboratori", index=False)
 
@@ -1173,13 +1181,32 @@ def parse_unified_school_excel(file_bytes: bytes, base_config: Optional[SchoolCo
                 r_cap = _parse_int(r.get("Capienza_Classi", r.get("Capienza_Aula", 1)), default=1)
                 r_prio = _parse_int(r.get("Priorita", 1), default=1)
                 r_spec = _parse_bool(r.get("Laboratorio_Speciale", False))
+                docs_raw = str(r.get("Docenti_Assegnati", r.get("Docenti", ""))).strip()
+                t_ids = []
+                if docs_raw and docs_raw.lower() != "nan":
+                    for d_entry in docs_raw.split(","):
+                        d_clean = d_entry.strip()
+                        if not d_clean:
+                            continue
+                        matched_tid = None
+                        for cand_tid, cand_t in teachers.items():
+                            if cand_t.name.lower() == d_clean.lower() or cand_tid.lower() == d_clean.lower():
+                                matched_tid = cand_tid
+                                break
+                        if matched_tid:
+                            t_ids.append(matched_tid)
+                        else:
+                            # id pulito
+                            t_ids.append("doc_" + _clean_id(d_clean))
+
                 classrooms[r_id] = Classroom(
                     id=r_id,
                     name=r_name,
                     subject_ids=sub_ids,
                     capacity=r_cap,
                     priority=r_prio,
-                    is_special_lab=r_spec
+                    is_special_lab=r_spec,
+                    teacher_ids=t_ids
                 )
             logs.append(f"🏛️ Caricati **{len(classrooms)} ambienti e aule DADA**.")
             break

@@ -218,10 +218,11 @@ def render_subject_coupling_panel(problem: TimetableProblem, key_prefix: str = "
     cols_count = 3
     sub_cols = st.columns(cols_count)
     
+    bp_v = st.session_state.get("block_prefs_version", 0)
     for idx, s in enumerate(all_subs):
         col_idx = idx % cols_count
         with sub_cols[col_idx]:
-            w_key = f"{key_prefix}_sub_block_{s.id}"
+            w_key = f"{key_prefix}_sub_block_{s.id}_{bp_v}"
             if s.id not in problem.config.subject_block_preferences:
                 problem.config.subject_block_preferences[s.id] = (s.id in ["art", "tec", "mot", "mus", "spa", "ita", "mat"])
             current_pref = problem.config.subject_block_preferences[s.id]
@@ -2377,12 +2378,36 @@ with tabs[0]:
     default_l_idx = 0
     if cur_second_lang in lang_list:
         default_l_idx = lang_list.index(cur_second_lang)
-    elif "Francese" in cur_second_lang:
+    elif "Francese" in cur_second_lang or cur_second_lang == "Francese":
         default_l_idx = 1
-    elif "Tedesco" in cur_second_lang:
+    elif "Tedesco" in cur_second_lang or cur_second_lang == "Tedesco":
         default_l_idx = 2
+    elif cur_second_lang == "Spagnolo":
+        default_l_idx = 0
     else:
         default_l_idx = 3
+
+    def on_second_lang_changed():
+        new_sel = st.session_state.get(f"sel_lang_opt_{v}")
+        if new_sel == "Altra Lingua / Personalizzata":
+            target_lang = st.session_state.get(f"custom_lang_input_{v}", "Seconda Lingua").strip() or "Seconda Lingua"
+        else:
+            target_lang = new_sel
+        
+        problem.config.second_language = target_lang
+        if "spa" in problem.subjects:
+            problem.subjects["spa"].name = f"Seconda Lingua ({target_lang})"
+        # Aggiorna aule
+        for r in problem.rooms.values():
+            if "spa" in r.subject_ids and any(k in r.name for k in ["Spagnolo", "Francese", "Tedesco", "Lingue", "Seconda Lingua"]):
+                r.name = f"Aula Lingue ({target_lang})"
+        # Aggiorna parallelismi
+        for pg in getattr(problem, "parallel_groups", []):
+            if pg.subject_id == "spa" and any(k in pg.name for k in ["Spagnolo", "Francese", "Tedesco", "Lingua"]):
+                pg.name = f"Parallelismo Classi - {target_lang}"
+        st.session_state["data_version"] = st.session_state.get("data_version", 0) + 1
+        st.session_state["block_prefs_version"] = st.session_state.get("block_prefs_version", 0) + 1
+        st.session_state.result = None
 
     c_lng1, c_lng2 = st.columns(2)
     with c_lng1:
@@ -2390,25 +2415,38 @@ with tabs[0]:
             "Lingua Comunitaria insegnata nella scuola:",
             lang_list,
             index=default_l_idx,
+            key=f"sel_lang_opt_{v}",
+            on_change=on_second_lang_changed,
             help="Scegli la seconda lingua comunitaria per la quale assegnare cattedre e docenti."
         )
     
     if sel_l_opt == "Altra Lingua / Personalizzata":
         with c_lng2:
-            custom_lang_val = st.text_input("Specifica nome lingua:", value=cur_second_lang if cur_second_lang not in ["Spagnolo", "Francese", "Tedesco"] else "Spagnolo")
+            custom_lang_val = st.text_input(
+                "Specifica nome lingua:",
+                value=cur_second_lang if cur_second_lang not in ["Spagnolo", "Francese", "Tedesco"] else "Spagnolo",
+                key=f"custom_lang_input_{v}",
+                on_change=on_second_lang_changed
+            )
             final_lang_name = custom_lang_val.strip() or "Seconda Lingua"
     else:
         final_lang_name = sel_l_opt
         with c_lng2:
-            st.info(f"Materia: **{sel_l_opt}** | Monte ore: **2h / settimana** per classe")
+            st.info(f"Materia: **Seconda Lingua ({sel_l_opt})** | Monte ore: **2h / settimana** per classe")
 
     if final_lang_name != getattr(problem.config, "second_language", ""):
         problem.config.second_language = final_lang_name
         if "spa" in problem.subjects:
             problem.subjects["spa"].name = f"Seconda Lingua ({final_lang_name})"
         for r in problem.rooms.values():
-            if "spa" in r.subject_ids and ("Spagnolo" in r.name or "Francese" in r.name or "Tedesco" in r.name or "Lingue" in r.name):
+            if "spa" in r.subject_ids and any(k in r.name for k in ["Spagnolo", "Francese", "Tedesco", "Lingue", "Seconda Lingua"]):
                 r.name = f"Aula Lingue ({final_lang_name})"
+        for pg in getattr(problem, "parallel_groups", []):
+            if pg.subject_id == "spa" and any(k in pg.name for k in ["Spagnolo", "Francese", "Tedesco", "Lingua"]):
+                pg.name = f"Parallelismo Classi - {final_lang_name}"
+        st.session_state["data_version"] = st.session_state.get("data_version", 0) + 1
+        st.session_state["block_prefs_version"] = st.session_state.get("block_prefs_version", 0) + 1
+        st.session_state.result = None
         st.rerun()
 
     # -------------------------------------------------------------
