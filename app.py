@@ -907,7 +907,7 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.edit-box-room-indicator) {
 }
 
 /* ------------------------------------------------------------- */
-/* SEGMENTED CONTROL A PILLOLE (STILE APPLE / LINEAR / STRIPE)   */
+/* SEGMENTED CONTROL A PILLOLE REATTIVO (LIGHT & DARK ADAPTIVE)  */
 /* ------------------------------------------------------------- */
 div[data-baseweb="tab-list"], 
 div[role="tablist"], 
@@ -915,11 +915,13 @@ div[data-testid="stTabs"] > div:first-child {
     position: sticky !important;
     top: 2.875rem !important;
     z-index: 9999 !important;
-    background: #f1f5f9 !important; /* Contenitore Satinato Grigio Chiaro */
-    border: 1px solid #e2e8f0 !important;
+    background-color: rgba(125, 125, 125, 0.14) !important; /* Adattivo perfetto: grigio chiaro in light, scuro satinato in dark */
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(125, 125, 125, 0.22) !important;
     border-radius: 14px !important;
     padding: 6px !important;
-    gap: 4px !important;
+    gap: 6px !important;
     margin-bottom: 24px !important;
     display: flex !important;
     flex-direction: row !important;
@@ -928,7 +930,7 @@ div[data-testid="stTabs"] > div:first-child {
     overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch !important;
     scrollbar-width: none !important;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06) !important;
 }
 
 /* Nascondi Scrollbar su Chrome/Safari/Edge */
@@ -938,7 +940,7 @@ div[role="tablist"]::-webkit-scrollbar {
     height: 0px !important;
 }
 
-/* Nascondi categoricamente la linea rossa/arancione di Streamlit */
+/* Nascondi la linea rossa/arancione di Streamlit */
 div[data-baseweb="tab-highlight"], 
 div[data-baseweb="tab-border"], 
 div[data-testid="stTabs"] hr,
@@ -952,7 +954,7 @@ div[role="tablist"]::after {
     opacity: 0 !important;
 }
 
-/* Schede Inattive (Pillole Trasparenti) */
+/* Schede Inattive */
 div[data-testid="stTabs"] button[data-testid="stTab"], 
 div[data-testid="stTabs"] [data-baseweb="tab"], 
 div[role="tablist"] button {
@@ -960,159 +962,42 @@ div[role="tablist"] button {
     border: none !important;
     border-radius: 10px !important;
     padding: 8px 16px !important;
-    color: #475569 !important;
     font-weight: 600 !important;
     font-size: 0.90rem !important;
     white-space: nowrap !important;
     flex-shrink: 0 !important;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition: all 0.2s ease !important;
     margin: 0 !important;
     box-shadow: none !important;
-}
-
-div[data-testid="stTabs"] button[data-testid="stTab"] p,
-div[data-testid="stTabs"] [data-baseweb="tab"] p,
-div[role="tablist"] button p {
-    color: #475569 !important;
-    font-weight: 600 !important;
+    opacity: 0.75 !important;
 }
 
 /* Hover Scheda Inattiva */
 div[data-testid="stTabs"] button[data-testid="stTab"]:hover,
 div[data-testid="stTabs"] [data-baseweb="tab"]:hover,
 div[role="tablist"] button:hover {
-    background-color: rgba(255, 255, 255, 0.65) !important;
-    color: #0f172a !important;
+    background-color: rgba(125, 125, 125, 0.18) !important;
+    opacity: 1 !important;
 }
 
-div[data-testid="stTabs"] button[data-testid="stTab"]:hover p,
-div[data-testid="stTabs"] [data-baseweb="tab"]:hover p,
-div[role="tablist"] button:hover p {
-    color: #0f172a !important;
-}
-
-/* Scheda ATTIVA (Pillola Bianca in Rilievo con Ombra Morbida) */
+/* Scheda ATTIVA (Adattiva con contrasto massimo) */
 div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"],
 div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
 div[role="tablist"] button[aria-selected="true"] {
-    background-color: #ffffff !important;
-    border: 1px solid rgba(0, 0, 0, 0.05) !important;
+    background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important; /* Gradiente elegante Navy/Sky */
+    border: 1px solid #38bdf8 !important;
     border-radius: 10px !important;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
+    opacity: 1 !important;
     z-index: 10 !important;
 }
 
 div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] p,
 div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] p,
-div[role="tablist"] button[aria-selected="true"] p {
-    color: #1e3a8a !important;
-    font-weight: 800 !important;
-}
-
-/* ============================================================= */
-/* SUPPORTO COMPLETO MODALITÀ SCURA PER LE SCHEDE (DARK THEME)   */
-/* ============================================================= */
-@media (prefers-color-scheme: dark) {
-    div[data-baseweb="tab-list"], 
-    div[role="tablist"], 
-    div[data-testid="stTabs"] > div:first-child {
-        background: #1e293b !important;
-        border: 1px solid #334155 !important;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35) !important;
-    }
-
-    /* Schede Inattive Dark */
-    div[data-testid="stTabs"] button[data-testid="stTab"], 
-    div[data-testid="stTabs"] [data-baseweb="tab"], 
-    div[role="tablist"] button {
-        background-color: transparent !important;
-        color: #94a3b8 !important;
-    }
-
-    div[data-testid="stTabs"] button[data-testid="stTab"] p,
-    div[data-testid="stTabs"] [data-baseweb="tab"] p,
-    div[role="tablist"] button p {
-        color: #94a3b8 !important;
-    }
-
-    /* Hover Scheda Inattiva Dark */
-    div[data-testid="stTabs"] button[data-testid="stTab"]:hover,
-    div[data-testid="stTabs"] [data-baseweb="tab"]:hover,
-    div[role="tablist"] button:hover {
-        background-color: rgba(255, 255, 255, 0.08) !important;
-        color: #f8fafc !important;
-    }
-
-    div[data-testid="stTabs"] button[data-testid="stTab"]:hover p,
-    div[data-testid="stTabs"] [data-baseweb="tab"]:hover p,
-    div[role="tablist"] button:hover p {
-        color: #f8fafc !important;
-    }
-
-    /* Scheda Attiva Dark */
-    div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"],
-    div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
-    div[role="tablist"] button[aria-selected="true"] {
-        background-color: #334155 !important;
-        border: 1px solid #475569 !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
-    }
-
-    div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] p,
-    div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] p,
-    div[role="tablist"] button[aria-selected="true"] p {
-        color: #38bdf8 !important;
-        font-weight: 800 !important;
-    }
-}
-
-/* Override esplicito se impostato tema Dark nelle impostazioni di Streamlit */
-[data-theme="dark"] div[data-baseweb="tab-list"],
-[data-theme="dark"] div[role="tablist"],
-[data-theme="dark"] div[data-testid="stTabs"] > div:first-child,
-.stApp[data-theme="dark"] div[data-baseweb="tab-list"],
-.stApp[data-theme="dark"] div[role="tablist"],
-.stApp[data-theme="dark"] div[data-testid="stTabs"] > div:first-child {
-    background: #1e293b !important;
-    border: 1px solid #334155 !important;
-}
-
-[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"],
-[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"],
-[data-theme="dark"] div[role="tablist"] button,
-.stApp[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"],
-.stApp[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"],
-.stApp[data-theme="dark"] div[role="tablist"] button {
-    background-color: transparent !important;
-    color: #94a3b8 !important;
-}
-
-[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"] p,
-[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"] p,
-[data-theme="dark"] div[role="tablist"] button p,
-.stApp[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"] p,
-.stApp[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"] p,
-.stApp[data-theme="dark"] div[role="tablist"] button p {
-    color: #94a3b8 !important;
-}
-
-[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"],
-[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
-[data-theme="dark"] div[role="tablist"] button[aria-selected="true"],
-.stApp[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"],
-.stApp[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
-.stApp[data-theme="dark"] div[role="tablist"] button[aria-selected="true"] {
-    background-color: #334155 !important;
-    border: 1px solid #475569 !important;
-}
-
-[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] p,
-[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] p,
-[data-theme="dark"] div[role="tablist"] button[aria-selected="true"] p,
-.stApp[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] p,
-.stApp[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] p,
-.stApp[data-theme="dark"] div[role="tablist"] button[aria-selected="true"] p {
-    color: #38bdf8 !important;
+div[role="tablist"] button[aria-selected="true"] p,
+div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] div,
+div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] div {
+    color: #ffffff !important; /* Testo bianco brillante sempre visibile */
     font-weight: 800 !important;
 }
 </style>
