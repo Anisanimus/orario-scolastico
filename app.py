@@ -821,6 +821,49 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.edit-box-teacher-indicator)
     margin-bottom: 25px !important;
 }
 
+/* Tipografia elegante e compatta per titoli (h1, h2, h3) */
+h1 {
+    font-size: 1.65rem !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.02em !important;
+    margin-top: 0.2rem !important;
+    margin-bottom: 0.6rem !important;
+}
+
+h2 {
+    font-size: 1.35rem !important;
+    font-weight: 750 !important;
+    letter-spacing: -0.01em !important;
+    margin-top: 0.4rem !important;
+    margin-bottom: 0.5rem !important;
+}
+
+h3 {
+    font-size: 1.18rem !important;
+    font-weight: 700 !important;
+    margin-top: 0.3rem !important;
+    margin-bottom: 0.4rem !important;
+}
+
+h4 {
+    font-size: 1.05rem !important;
+    font-weight: 650 !important;
+    margin-top: 0.2rem !important;
+    margin-bottom: 0.3rem !important;
+}
+
+h5 {
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+}
+
+/* Stili Schede Tab Superiori compatti ed eleganti */
+button[data-baseweb="tab"] {
+    font-size: 0.92rem !important;
+    font-weight: 600 !important;
+    padding: 8px 14px !important;
+}
+
 /* Stili Banner & Container Modifica Attiva Aule */
 .edit-banner-room {
     background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
