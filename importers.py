@@ -967,13 +967,32 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
                         t = problem.teachers.get(sa.teacher_id)
                         t_name = t.name if t else sa.teacher_id
                         pref_areas = ", ".join(getattr(t, "preferred_areas", [])) if t else ""
+                        
+                        # Desiderata docente sostegno
+                        fl = getattr(t, "free_days", []) or []
+                        fl_str = ", ".join(fl) if fl else ""
+                        late_str = "Si" if (t and getattr(t, "prefer_late_entry", False)) else "No"
+                        early_str = "Si" if (t and getattr(t, "prefer_early_exit", False)) else "No"
+                        m_gap = getattr(t, "max_gap_hours", 2) if t else 2
+                        
+                        unav_strs = []
+                        if t and getattr(t, "unavailable_slots", []):
+                            for d_i, h_i in t.unavailable_slots:
+                                if d_i < len(DAYS_OF_WEEK): unav_strs.append(f"{DAYS_OF_WEEK[d_i]} {h_i+1}")
+                        unav_s = ", ".join(unav_strs)
+
                         sost_rows.append([
                             st_obj.name,
                             c_name,
                             st_obj.weekly_hours,
                             t_name,
                             sa.hours_per_week,
-                            pref_areas or "Tutte"
+                            pref_areas or "Tutte",
+                            fl_str,
+                            late_str,
+                            early_str,
+                            m_gap,
+                            unav_s
                         ])
                 else:
                     sost_rows.append([
@@ -982,14 +1001,22 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
                         st_obj.weekly_hours,
                         "",
                         0,
-                        "Tutte"
+                        "Tutte",
+                        "",
+                        "No",
+                        "No",
+                        2,
+                        ""
                     ])
         else:
             sost_rows = [
-                ["Studente DVA 1 (1ª A)", "1ª A", 9, "Prof. Sostegno 1", 9, "scientifica"],
-                ["Studente DVA 2 (2ª A)", "2ª A", 18, "Prof. Sostegno 2", 18, "umanistica, scientifica"]
+                ["Alunno Rossi M. (1ª A)", "1ª A", 9, "Prof. Gentile (Sostegno 18h)", 9, "scientifica", "", "No", "No", 2, ""],
+                ["Alunno Bianchi F. (2ª A)", "2ª A", 18, "Prof. Marini (Sostegno 18h)", 18, "umanistica, scientifica", "Mercoledì", "Si", "No", 1, "Venerdì 6"]
             ]
-        sost_cols = ["Studente_DVA", "Classe", "Ore_Totali_Richieste", "Docente_Sostegno", "Ore_Assegnate", "Aree_Disciplinari_Preferite"]
+        sost_cols = [
+            "Studente_DVA", "Classe", "Ore_Totali_Richieste", "Docente_Sostegno", "Ore_Assegnate", 
+            "Aree_Disciplinari_Preferite", "Giorni_Liberi_Docente", "Entra_Tardi", "Esce_Presto", "Max_Ore_Buche", "Slot_Indisponibili"
+        ]
         df_sost = pd.DataFrame(sost_rows, columns=sost_cols)
         df_sost.to_excel(writer, sheet_name="5_Sostegno_e_DVA", index=False)
 
@@ -1324,6 +1351,21 @@ def parse_unified_school_excel(file_bytes: bytes, base_config: Optional[SchoolCo
                         pref_areas = [x.strip().lower() for x in str(r.get("Aree_Disciplinari_Preferite")).split(",") if x.strip()]
                     teachers[t_id].preferred_areas = pref_areas or ["umanistica", "scientifica"]
 
+                    # Carica desiderata specifici del docente di sostegno se presenti
+                    if "Giorni_Liberi_Docente" in r and pd.notna(r["Giorni_Liberi_Docente"]):
+                        f_days = _parse_free_days(r["Giorni_Liberi_Docente"])
+                        teachers[t_id].free_days = f_days
+                        teachers[t_id].free_day_1 = f_days[0] if f_days else None
+                        teachers[t_id].free_day_2 = f_days[1] if len(f_days) > 1 else None
+                    if "Entra_Tardi" in r and pd.notna(r["Entra_Tardi"]):
+                        teachers[t_id].prefer_late_entry = _parse_bool(r["Entra_Tardi"])
+                    if "Esce_Presto" in r and pd.notna(r["Esce_Presto"]):
+                        teachers[t_id].prefer_early_exit = _parse_bool(r["Esce_Presto"])
+                    if "Max_Ore_Buche" in r and pd.notna(r["Max_Ore_Buche"]):
+                        teachers[t_id].max_gap_hours = _parse_int(r["Max_Ore_Buche"], default=2)
+                    if "Slot_Indisponibili" in r and pd.notna(r["Slot_Indisponibili"]):
+                        teachers[t_id].unavailable_slots = _parse_slots_str(r["Slot_Indisponibili"])
+
                     sa_id = f"sa_{dva_id}_{t_id}_{len(support_assignments)}"
                     support_assignments.append(SupportAssignment(
                         id=sa_id,
@@ -1333,7 +1375,7 @@ def parse_unified_school_excel(file_bytes: bytes, base_config: Optional[SchoolCo
                         hours_per_week=assign_hrs
                     ))
             if students_dva:
-                logs.append(f"🤝 Caricati **{len(students_dva)} studenti DVA** e **{len(support_assignments)} abbinamenti sostegno**.")
+                logs.append(f"🤝 Caricati **{len(students_dva)} studenti DVA** e **{len(support_assignments)} abbinamenti sostegno** (con desiderata docenti).")
             break
 
     # 7. Parsing Classi Aperte / Parallelismi
