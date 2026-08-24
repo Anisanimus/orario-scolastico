@@ -817,9 +817,29 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
                     if d_i < len(DAYS_OF_WEEK): unav_strs.append(f"{DAYS_OF_WEEK[d_i]} {h_i+1}")
                 unav_s = ", ".join(unav_strs)
 
+                # Mappa CdC in materia leggibile in italiano
+                cdc_raw = getattr(t, "cdc", "")
+                materia_label = cdc_raw
+                sec_lang = getattr(problem.config, "second_language", "Francese")
+                cdc_map = {
+                    "A-22": "Lettere (Italiano, Storia, Geografia)",
+                    "A-28": "Matematica e Scienze",
+                    "A-60": "Tecnologia",
+                    "A-24": f"Lingue (Inglese / {sec_lang})",
+                    "A-01": "Arte e Immagine",
+                    "A-30": "Musica",
+                    "A-48": "Scienze Motorie (Ginnastica)",
+                    "Religione": "Religione Cattolica",
+                    "ADMM": "Sostegno Didattico"
+                }
+                for c_k, c_v in cdc_map.items():
+                    if c_k in cdc_raw:
+                        materia_label = c_v
+                        break
+
                 doc_rows.append([
                     t.name,
-                    getattr(t, "cdc", ""),
+                    materia_label,
                     "Si" if getattr(t, "is_part_time", False) else "No",
                     getattr(t, "contract_hours", 18),
                     getattr(t, "max_working_days", 5),
@@ -833,12 +853,12 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
                 ])
         else:
             doc_rows = [
-                ["Prof.ssa Bianchi M.", "A-22", "No", 18, 5, "", "No", "Si", 5, 2, "", ""],
-                ["Prof. Verdi G.", "A-28", "No", 18, 5, "", "Si", "No", 5, 1, "", ""],
-                ["Prof.ssa Colombo S.", "A-24", "Si", 12, 3, "Lunedì, Mercoledì", "No", "No", 4, 1, "Mercoledì 1", "Lunedì 6"]
+                ["Prof.ssa Bianchi M.", "Lettere (Italiano, Storia, Geografia)", "No", 18, 5, "", "No", "Si", 5, 2, "", ""],
+                ["Prof. Verdi G.", "Matematica e Scienze", "No", 18, 5, "", "Si", "No", 5, 1, "", ""],
+                ["Prof.ssa Colombo S.", "Francese", "Si", 12, 3, "Lunedì, Mercoledì", "No", "No", 4, 1, "Mercoledì 1", "Lunedì 6"]
             ]
         doc_cols = [
-            "Docente", "CdC", "Part_Time", "Ore_Contratto", "Max_Giorni_Presenza",
+            "Docente", "Materia_Insegnamento", "Part_Time", "Ore_Contratto", "Max_Giorni_Presenza",
             "Giorni_Liberi", "Entra_Tardi", "Esce_Presto", "Max_Ore_Giorno", "Max_Ore_Buche",
             "Slot_Sconsigliati", "Slot_Indisponibili"
         ]
@@ -1132,10 +1152,24 @@ def parse_unified_school_excel(file_bytes: bytes, base_config: Optional[SchoolCo
                 soft_slots = _parse_slots_str(r.get("Slot_Sconsigliati", ""))
                 unav_slots = _parse_slots_str(r.get("Slot_Indisponibili", ""))
 
+                raw_cdc = str(r.get("Materia_Insegnamento", r.get("CdC", r.get("Materia", "")))).strip()
+                if raw_cdc.lower() == "nan": raw_cdc = ""
+                # Converti descrizione in CdC pulita se necessario
+                clean_cdc = raw_cdc
+                if "lettere" in raw_cdc.lower() or "italiano" in raw_cdc.lower(): clean_cdc = "A-22"
+                elif "matematica" in raw_cdc.lower() or "scienze" in raw_cdc.lower() and "motoria" not in raw_cdc.lower(): clean_cdc = "A-28"
+                elif "tecnologia" in raw_cdc.lower() or "coding" in raw_cdc.lower(): clean_cdc = "A-60"
+                elif "inglese" in raw_cdc.lower() or "francese" in raw_cdc.lower() or "spagnolo" in raw_cdc.lower() or "tedesco" in raw_cdc.lower() or "lingua" in raw_cdc.lower(): clean_cdc = "A-24"
+                elif "arte" in raw_cdc.lower() or "immagine" in raw_cdc.lower(): clean_cdc = "A-01"
+                elif "musica" in raw_cdc.lower(): clean_cdc = "A-30"
+                elif "motoria" in raw_cdc.lower() or "ginnastica" in raw_cdc.lower() or "sport" in raw_cdc.lower(): clean_cdc = "A-48"
+                elif "religione" in raw_cdc.lower(): clean_cdc = "Religione"
+                elif "sostegno" in raw_cdc.lower(): clean_cdc = "ADMM"
+
                 teachers[t_id] = Teacher(
                     id=t_id,
                     name=doc_name,
-                    cdc=str(r.get("CdC", "")).strip() if pd.notna(r.get("CdC", "")) else "",
+                    cdc=clean_cdc,
                     is_part_time=is_pt,
                     contract_hours=c_hours,
                     max_working_days=m_days if is_pt else None,
