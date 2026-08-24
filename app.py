@@ -1016,7 +1016,7 @@ div[role="tablist"] button[aria-selected="true"] p {
     div[data-baseweb="tab-list"], 
     div[role="tablist"], 
     div[data-testid="stTabs"] > div:first-child {
-        background: #1e293b !important; /* Grigio scuro ardesia satinato */
+        background: #1e293b !important;
         border: 1px solid #334155 !important;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35) !important;
     }
@@ -1061,9 +1061,59 @@ div[role="tablist"] button[aria-selected="true"] p {
     div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] p,
     div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] p,
     div[role="tablist"] button[aria-selected="true"] p {
-        color: #38bdf8 !important; /* Celeste acceso luminoso ad alto contrasto */
+        color: #38bdf8 !important;
         font-weight: 800 !important;
     }
+}
+
+/* Override esplicito se impostato tema Dark nelle impostazioni di Streamlit */
+[data-theme="dark"] div[data-baseweb="tab-list"],
+[data-theme="dark"] div[role="tablist"],
+[data-theme="dark"] div[data-testid="stTabs"] > div:first-child,
+.stApp[data-theme="dark"] div[data-baseweb="tab-list"],
+.stApp[data-theme="dark"] div[role="tablist"],
+.stApp[data-theme="dark"] div[data-testid="stTabs"] > div:first-child {
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+}
+
+[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"],
+[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"],
+[data-theme="dark"] div[role="tablist"] button,
+.stApp[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"],
+.stApp[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"],
+.stApp[data-theme="dark"] div[role="tablist"] button {
+    background-color: transparent !important;
+    color: #94a3b8 !important;
+}
+
+[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"] p,
+[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"] p,
+[data-theme="dark"] div[role="tablist"] button p,
+.stApp[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"] p,
+.stApp[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"] p,
+.stApp[data-theme="dark"] div[role="tablist"] button p {
+    color: #94a3b8 !important;
+}
+
+[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"],
+[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
+[data-theme="dark"] div[role="tablist"] button[aria-selected="true"],
+.stApp[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"],
+.stApp[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
+.stApp[data-theme="dark"] div[role="tablist"] button[aria-selected="true"] {
+    background-color: #334155 !important;
+    border: 1px solid #475569 !important;
+}
+
+[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] p,
+[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] p,
+[data-theme="dark"] div[role="tablist"] button[aria-selected="true"] p,
+.stApp[data-theme="dark"] div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] p,
+.stApp[data-theme="dark"] div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] p,
+.stApp[data-theme="dark"] div[role="tablist"] button[aria-selected="true"] p {
+    color: #38bdf8 !important;
+    font-weight: 800 !important;
 }
 </style>
 """, unsafe_allow_html=True)
