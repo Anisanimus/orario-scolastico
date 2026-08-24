@@ -32,30 +32,86 @@ def render_support_management_tab(problem: TimetableProblem):
         if not studs:
             st.info("Nessun alunno DVA registrato. Usa il modulo sottostante per aggiungere il primo alunno.")
         else:
+            if "editing_dva_id" not in st.session_state:
+                st.session_state["editing_dva_id"] = None
+
             for s_id, s in list(studs.items()):
                 c_obj = problem.classes.get(s.class_id)
                 c_name = c_obj.name if c_obj else s.class_id
                 
                 badge_grave = "🔴 **Caso Grave (Rapporto 1:1 - Copertura Continua)**" if s.is_severe_coverage else "🟢 **Autonomia Media / Parziale**"
+                is_editing = (st.session_state["editing_dva_id"] == s_id)
                 
-                with st.expander(f"♿ {s.name} • Classe {c_name} ({s.weekly_hours}h PEI)", expanded=False):
-                    c_info1, c_info2 = st.columns([2, 1])
-                    with c_info1:
-                        st.markdown(f"- **Grado di Copertura**: {badge_grave}")
-                        st.markdown(f"- **Ore Settimanali Assegnate**: `{s.weekly_hours} ore/settimana`")
-                        pref_sub_names = [problem.subjects[sub_id].name for sub_id in s.preferred_subjects if sub_id in problem.subjects]
-                        excl_sub_names = [problem.subjects[sub_id].name for sub_id in s.excluded_subjects if sub_id in problem.subjects]
-                        st.markdown(f"- **Discipline Prioritarie da Coprire**: {', '.join(pref_sub_names) if pref_sub_names else 'Tutte le discipline curricolari'}")
-                        if excl_sub_names:
-                            st.markdown(f"- **Discipline Non Coperte / Autonomia**: {', '.join(excl_sub_names)}")
-                        if s.notes:
-                            st.markdown(f"- **Note Pedagogiche**: *{s.notes}*")
-                    with c_info2:
-                        if st.button("🗑️ Elimina Alunno", key=f"del_stud_{s_id}", use_container_width=True):
-                            del problem.students_dva[s_id]
-                            problem.support_assignments = [sa for sa in problem.support_assignments if sa.student_id != s_id]
-                            st.success(f"Alunno {s.name} eliminato!")
-                            st.rerun()
+                with st.expander(f"♿ {s.name} • Classe {c_name} ({s.weekly_hours}h PEI){' ✏️ [IN MODIFICA]' if is_editing else ''}", expanded=is_editing):
+                    if not is_editing:
+                        c_info1, c_info2 = st.columns([3, 1])
+                        with c_info1:
+                            st.markdown(f"- **Grado di Copertura**: {badge_grave}")
+                            st.markdown(f"- **Ore Settimanali Assegnate**: `{s.weekly_hours} ore/settimana`")
+                            pref_sub_names = [problem.subjects[sub_id].name for sub_id in s.preferred_subjects if sub_id in problem.subjects]
+                            excl_sub_names = [problem.subjects[sub_id].name for sub_id in s.excluded_subjects if sub_id in problem.subjects]
+                            st.markdown(f"- **Discipline Prioritarie da Coprire**: {', '.join(pref_sub_names) if pref_sub_names else 'Tutte le discipline curricolari'}")
+                            if excl_sub_names:
+                                st.markdown(f"- **Discipline Non Coperte / Autonomia**: {', '.join(excl_sub_names)}")
+                            if s.notes:
+                                st.markdown(f"- **Note Pedagogiche**: *{s.notes}*")
+                        with c_info2:
+                            if st.button("✏️ Modifica Alunno", key=f"btn_edit_dva_{s_id}", use_container_width=True):
+                                st.session_state["editing_dva_id"] = s_id
+                                st.rerun()
+                            if st.button("🗑️ Elimina Alunno", key=f"del_stud_{s_id}", use_container_width=True):
+                                del problem.students_dva[s_id]
+                                problem.support_assignments = [sa for sa in problem.support_assignments if sa.student_id != s_id]
+                                st.session_state["data_version"] = st.session_state.get("data_version", 0) + 1
+                                st.success(f"Alunno {s.name} eliminato!")
+                                st.rerun()
+                    else:
+                        st.markdown("##### ✏️ Modifica Dati & Bisogni PEI Alunno")
+                        with st.form(f"form_edit_dva_{s_id}"):
+                            e_c1, e_c2, e_c3 = st.columns([2, 1, 1])
+                            with e_c1:
+                                edit_name = st.text_input("Nome / Codice Alunno", value=s.name)
+                            with e_c2:
+                                class_choices = list(problem.classes.keys())
+                                cur_c_idx = class_choices.index(s.class_id) if s.class_id in class_choices else 0
+                                edit_class = st.selectbox("Classe di Appartenenza", class_choices, index=cur_c_idx, format_func=lambda x: problem.classes[x].name if x in problem.classes else x) if class_choices else s.class_id
+                            with e_c3:
+                                edit_hours = st.number_input("Ore Settimanali PEI", min_value=1, max_value=30, value=s.weekly_hours, step=1)
+
+                            e_o1, e_o2 = st.columns(2)
+                            with e_o1:
+                                edit_severe = st.checkbox("🔴 Caso Grave (Rapporto 1:1 - Copertura continua)", value=s.is_severe_coverage)
+                                sub_opts = list(problem.subjects.keys())
+                                edit_pref_subs = st.multiselect("Discipline Prioritarie da Coprire", sub_opts, default=[sub_id for sub_id in s.preferred_subjects if sub_id in sub_opts], format_func=lambda x: problem.subjects[x].name if x in problem.subjects else x)
+                            with e_o2:
+                                edit_excl_subs = st.multiselect("Discipline Non Coperte / Autonomia", sub_opts, default=[sub_id for sub_id in s.excluded_subjects if sub_id in sub_opts], format_func=lambda x: problem.subjects[x].name if x in problem.subjects else x)
+                                edit_notes = st.text_input("Note pedagogiche / orarie opzionali", value=s.notes or "")
+
+                            btn_save_col, btn_cancel_col = st.columns(2)
+                            with btn_save_col:
+                                btn_save = st.form_submit_button("💾 Salva Modifiche Alunno", type="primary", use_container_width=True)
+                            with btn_cancel_col:
+                                btn_cancel = st.form_submit_button("❌ Annulla", use_container_width=True)
+
+                            if btn_save:
+                                if not edit_name:
+                                    st.error("Il nome dell'alunno non può essere vuoto.")
+                                else:
+                                    s.name = edit_name
+                                    s.class_id = edit_class
+                                    s.weekly_hours = edit_hours
+                                    s.is_severe_coverage = edit_severe
+                                    s.preferred_subjects = edit_pref_subs
+                                    s.excluded_subjects = edit_excl_subs
+                                    s.notes = edit_notes
+                                    st.session_state["editing_dva_id"] = None
+                                    st.session_state["data_version"] = st.session_state.get("data_version", 0) + 1
+                                    st.success(f"Dati di {edit_name} aggiornati con successo!")
+                                    st.rerun()
+
+                            if btn_cancel:
+                                st.session_state["editing_dva_id"] = None
+                                st.rerun()
 
         st.markdown("---")
         st.markdown("##### ➕ Aggiungi Nuovo Alunno DVA")
