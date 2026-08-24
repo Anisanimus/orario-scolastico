@@ -894,15 +894,15 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(.edit-box-room-indicator) {
 }
 
 /* ------------------------------------------------------------- */
-/* SEGMENTED CONTROL A PILLOLE REATTIVO (LIGHT & DARK ADAPTIVE)  */
+/* SCHEDE PRINCIPALI A PILLOLE (TOP-LEVEL MAIN TABS)             */
 /* ------------------------------------------------------------- */
-div[data-baseweb="tab-list"], 
-div[role="tablist"], 
-div[data-testid="stTabs"] > div:first-child {
+div[data-testid="stAppViewBlockContainer"] > div:first-child div[data-testid="stTabs"] > div[role="tablist"],
+.main div[data-testid="stTabs"]:first-child > div[role="tablist"],
+.stApp div[data-testid="stTabs"] > div:first-child {
     position: sticky !important;
     top: 2.875rem !important;
-    z-index: 9999 !important;
-    background-color: rgba(125, 125, 125, 0.14) !important; /* Adattivo perfetto: grigio chiaro in light, scuro satinato in dark */
+    z-index: 999 !important;
+    background-color: rgba(125, 125, 125, 0.12) !important;
     backdrop-filter: blur(12px) !important;
     -webkit-backdrop-filter: blur(12px) !important;
     border: 1px solid rgba(125, 125, 125, 0.22) !important;
@@ -915,19 +915,11 @@ div[data-testid="stTabs"] > div:first-child {
     flex-wrap: nowrap !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
-    -webkit-overflow-scrolling: touch !important;
     scrollbar-width: none !important;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06) !important;
 }
 
-/* Nascondi Scrollbar su Chrome/Safari/Edge */
-div[data-baseweb="tab-list"]::-webkit-scrollbar, 
-div[role="tablist"]::-webkit-scrollbar {
-    display: none !important;
-    height: 0px !important;
-}
-
-/* Nascondi la linea rossa/arancione di Streamlit */
+/* Nascondi la linea rossa/arancione di Streamlit ovunque */
 div[data-baseweb="tab-highlight"], 
 div[data-baseweb="tab-border"], 
 div[data-testid="stTabs"] hr,
@@ -941,7 +933,7 @@ div[role="tablist"]::after {
     opacity: 0 !important;
 }
 
-/* Schede Inattive */
+/* Schede Inattive Generali (Sia Principali che Sottoschede) */
 div[data-testid="stTabs"] button[data-testid="stTab"], 
 div[data-testid="stTabs"] [data-baseweb="tab"], 
 div[role="tablist"] button {
@@ -956,10 +948,10 @@ div[role="tablist"] button {
     transition: all 0.2s ease !important;
     margin: 0 !important;
     box-shadow: none !important;
-    opacity: 0.75 !important;
+    opacity: 0.78 !important;
 }
 
-/* Hover Scheda Inattiva */
+/* Hover Schede Inattive */
 div[data-testid="stTabs"] button[data-testid="stTab"]:hover,
 div[data-testid="stTabs"] [data-baseweb="tab"]:hover,
 div[role="tablist"] button:hover {
@@ -967,11 +959,11 @@ div[role="tablist"] button:hover {
     opacity: 1 !important;
 }
 
-/* Scheda ATTIVA (Adattiva con contrasto massimo) */
+/* Scheda ATTIVA (Sia Principale che Sottoscheda): Pillola blu con testo bianco nitido */
 div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"],
 div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"],
 div[role="tablist"] button[aria-selected="true"] {
-    background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important; /* Gradiente elegante Navy/Sky */
+    background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important;
     border: 1px solid #38bdf8 !important;
     border-radius: 10px !important;
     box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
@@ -982,10 +974,14 @@ div[role="tablist"] button[aria-selected="true"] {
 div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] p,
 div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] p,
 div[role="tablist"] button[aria-selected="true"] p,
+div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] span,
+div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] span,
+div[role="tablist"] button[aria-selected="true"] span,
 div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] div,
 div[data-testid="stTabs"] [data-baseweb="tab"][aria-selected="true"] div {
-    color: #ffffff !important; /* Testo bianco brillante sempre visibile */
+    color: #ffffff !important;
     font-weight: 800 !important;
+    -webkit-text-fill-color: #ffffff !important;
 }
 </style>
 """, unsafe_allow_html=True)
