@@ -307,10 +307,39 @@ class TimetableSolver:
         self.problem = problem
         self.cfg = problem.config
         self.num_days = self.cfg.num_days
-        self.daily_hours = self.cfg.daily_hours[:self.num_days]
+        self.base_daily_hours = self.cfg.daily_hours[:self.num_days]
         self.max_gap_limit = max_gap_limit
         self.strict_gap_limit = strict_gap_limit
         self.model = cp_model.CpModel()
+        
+        # Calcolo slot giornalieri effettivi per ciascuna classe (con rientri pomeridiani: +1h o +2h)
+        self.class_daily_hours: Dict[str, List[int]] = {}
+        for c_id, c in problem.classes.items():
+            c_dh = list(self.base_daily_hours)
+            aft_days = getattr(c, "afternoon_days", []) or []
+            target_h = getattr(c, "weekly_hours_target", sum(c_dh)) or sum(c_dh)
+            diff_h = target_h - sum(c_dh)
+            
+            if diff_h > 0 and aft_days:
+                # Distribuisci le ore pomeridiane aggiuntive sui giorni di rientro
+                extra_per_day = diff_h // len(aft_days)
+                rem_extra = diff_h % len(aft_days)
+                for idx_d, d_name in enumerate(DAYS_OF_WEEK[:self.num_days]):
+                    if d_name in aft_days:
+                        c_dh[idx_d] += extra_per_day + (1 if rem_extra > 0 else 0)
+                        rem_extra = max(0, rem_extra - 1)
+            elif diff_h > 0:
+                # Se non specificato, aggiungi all'inizio settimana
+                for idx_d in range(min(diff_h, self.num_days)):
+                    c_dh[idx_d] += 1
+            self.class_daily_hours[c_id] = c_dh
+
+        # Ore massime per giorno della scuola (compresi i pomeriggi)
+        self.daily_hours = [
+            max([self.class_daily_hours[c_id][d] for c_id in problem.classes] + [self.base_daily_hours[d]])
+            if problem.classes else self.base_daily_hours[d]
+            for d in range(self.num_days)
+        ]
         
         # Variabili di decisione: (assignment_id, d, h) -> BoolVar
         self.x = {}
@@ -435,13 +464,19 @@ class TimetableSolver:
                     for h in range(min(4, daily_hours[d])): # Nelle prime 4 ore è vietato
                         m.Add(self.x[a.id, d, h] == 0)
 
-        # 3. VINCOLO RIGIDO: Una classe può avere al massimo 1 lezione per ora
-        for class_id in prob.classes:
+        # 3. VINCOLO RIGIDO: Una classe può avere al massimo 1 lezione per ora (e solo nelle sue ore giornaliere previste)
+        for class_id, class_obj in prob.classes.items():
             class_assignments = [a for a in prob.assignments if a.class_id == class_id]
+            c_dh = self.class_daily_hours.get(class_id, self.base_daily_hours)
             for d in range(num_days):
+                max_h_for_class_today = c_dh[d] if d < len(c_dh) else daily_hours[d]
                 for h in range(daily_hours[d]):
                     slots = [self.x[a.id, d, h] for a in class_assignments]
-                    m.Add(sum(slots) <= 1)
+                    if h < max_h_for_class_today:
+                        m.Add(sum(slots) <= 1)
+                    else:
+                        # Fuori dall'orario di questa classe in questo giorno -> nessuna lezione
+                        m.Add(sum(slots) == 0)
 
         # 4. VINCOLO RIGIDO: Classi Aperte & Parallelismi Didattici (Sincronizzazione Oraria Perfetta)
         active_parallel_groups = [g for g in getattr(prob.config, "parallel_groups", []) if getattr(g, "is_active", True)]

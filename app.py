@@ -4350,13 +4350,14 @@ with tabs[5]:
                         if any(other.class_id == a.class_id and other.subject_id == "app_custom" for other in problem.assignments):
                             a.hours_per_week = 5
 
-            # Assicura che ogni classe abbia esattamente 30 ore
+            # Assicura che ogni classe abbia esattamente le ore del suo indirizzo (30h, 32h Musicale, 36h Prolungato)
             exp_slots = problem.config.total_weekly_slots
             for c_id, c in problem.classes.items():
+                target_c_h = getattr(c, "weekly_hours_target", exp_slots) or exp_slots
                 c_assigns = [a for a in problem.assignments if a.class_id == c_id]
                 tot_c = sum(a.hours_per_week for a in c_assigns)
-                if tot_c > exp_slots:
-                    excess = tot_c - exp_slots
+                if tot_c > target_c_h:
+                    excess = tot_c - target_c_h
                     for a in c_assigns:
                         if a.subject_id == "ita" and a.hours_per_week > 5 and excess > 0:
                             a.hours_per_week -= 1
