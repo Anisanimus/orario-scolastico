@@ -1408,7 +1408,10 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
         )
         t_prefer_late = len(t_late_days) > 0
         t_prefer_early = len(t_early_days) > 0
-    
+
+    st.markdown("##### ⏱️ Fasce Orarie & Disponibilità Giornaliere (Mattino / Pomeriggio)")
+    st.caption("Imposta facilmente se il docente (es. docente di strumento) lavora solo al **mattino (es. 1ª-4ª ora)** o solo al **pomeriggio (rientri/dopo mensa)**:")
+
     tab_indisp, tab_req, tab_pin, tab_soft = st.tabs([
         "🔴 1. Escludi in queste ore (MAI Lezione)",
         "🟢 2. Includi in queste ore (DEVE Avere Lezione)",
@@ -2668,9 +2671,9 @@ with tabs[0]:
     # -------------------------------------------------------------
     st.divider()
     st.subheader("🎼 Indirizzo Musicale (32h) & Tempo Prolungato (36h)")
-    st.caption("Configura le sezioni a indirizzo speciale con rientri pomeridiani personalizzati, durata mensa e compresenze fino a 4 docenti.")
+    st.caption("Configura le sezioni a indirizzo speciale con selezione della sezione (es. Corso F), scelta dei pomeriggi di rientro per singola classe, durata mensa e fasce orarie docenti.")
 
-    col_mus1, col_mus2 = st.columns(2)
+    col_mus1, col_mus2 = st.columns([1.2, 1.0])
     with col_mus1:
         with st.container(border=True):
             st.markdown("##### 🎼 Sezione a Indirizzo Musicale (32 Ore)")
@@ -2681,28 +2684,109 @@ with tabs[0]:
             )
             problem.config.has_musical_curriculum = has_mus
             if has_mus:
-                st.caption("Le 2 ore aggiuntive (Orchestra / Solfeggio) possono essere collocate sia al mattino che al pomeriggio.")
-                co_doc_num = st.slider("Numero docenti in compresenza per Orchestra/Solfeggio:", min_value=1, max_value=4, value=int(getattr(problem.config, "musical_orchestra_co_teachers", 4)), step=1)
-                problem.config.musical_orchestra_co_teachers = co_doc_num
+                # Scelta della sezione musicale (es. Corso F)
+                all_sections = sorted(list(set(c.section for c in problem.classes.values()))) if problem.classes else ["A", "B", "C", "D", "E", "F"]
+                cur_mus_sec = "F" if "F" in all_sections else (all_sections[0] if all_sections else "F")
                 
-                st.markdown("**Strumenti del corso musicale**:")
-                inst_txt = st.text_input("Strumenti (separati da virgola):", value=", ".join(getattr(problem.config, "musical_instruments", ["Flauto", "Violino", "Chitarra", "Clarinetto"])))
+                c_m_sec, c_m_co = st.columns(2)
+                with c_m_sec:
+                    chosen_mus_sec = st.selectbox(
+                        "Sezione Attiva a Indirizzo Musicale (32h):",
+                        options=all_sections,
+                        index=all_sections.index(cur_mus_sec) if cur_mus_sec in all_sections else 0,
+                        help="Tutte le classi di questa sezione (es. 1F, 2F, 3F) avranno orario a 32h settimanali con le 2h di Orchestra/Musica d'Insieme."
+                    )
+                with c_m_co:
+                    co_doc_num = st.slider(
+                        "Docenti in compresenza per Orchestra:", 
+                        min_value=1, max_value=4, 
+                        value=int(getattr(problem.config, "musical_orchestra_co_teachers", 4)), 
+                        step=1,
+                        help="Numero di docenti di strumento compresenti contemporaneamente nelle 2h di Orchestra / Solfeggio."
+                    )
+                    problem.config.musical_orchestra_co_teachers = co_doc_num
+
+                st.markdown("##### 🎻 Strumenti del Corso Musicale:")
+                inst_txt = st.text_input(
+                    "Strumenti musicali attivi (separati da virgola):", 
+                    value=", ".join(getattr(problem.config, "musical_instruments", ["Flauto", "Violino", "Chitarra", "Clarinetto"])),
+                    help="I 4 strumenti della scuola con cattedra A-56 / A-30."
+                )
                 problem.config.musical_instruments = [x.strip() for x in inst_txt.split(",") if x.strip()]
+
+                # Sincronizza le classi della sezione scelta a 32h
+                for c_id, c_obj in problem.classes.items():
+                    if c_obj.section == chosen_mus_sec:
+                        c_obj.curriculum_type = "musicale"
+                        c_obj.weekly_hours_target = 32
+                    elif getattr(c_obj, "curriculum_type", "ordinario") == "musicale" and c_obj.section != chosen_mus_sec:
+                        c_obj.curriculum_type = "ordinario"
+                        c_obj.weekly_hours_target = 30
+
+                st.markdown("##### 📅 Scelta Pomeriggi di Rientro per Classe Musicale (32h):")
+                st.caption("Ogni classe del corso musicale può rientrare lo **stesso giorno** oppure in **giorni diversi** (es. 1F Lunedì, 2F Martedì, 3F Mercoledì):")
+                
+                mus_classes_list = [c for c in problem.classes.values() if c.section == chosen_mus_sec or c.curriculum_type == "musicale"]
+                if mus_classes_list:
+                    for mus_c in mus_classes_list:
+                        c_col_n, c_col_d, c_col_m = st.columns([1.2, 2.0, 1.2])
+                        with c_col_n:
+                            st.markdown(f"**Classe {mus_c.name}** *(32h)*")
+                        with c_col_d:
+                            cur_aft = getattr(mus_c, "afternoon_days", []) or ["Lunedì"]
+                            chosen_aft = st.multiselect(
+                                f"Pomeriggi rientro {mus_c.name}",
+                                options=DAYS_OF_WEEK[:problem.config.num_days],
+                                default=[d for d in cur_aft if d in DAYS_OF_WEEK[:problem.config.num_days]] or [DAYS_OF_WEEK[0]],
+                                key=f"mus_class_aft_sel_{mus_c.id}",
+                                label_visibility="collapsed"
+                            )
+                            mus_c.afternoon_days = chosen_aft
+                        with c_col_m:
+                            cur_l = getattr(mus_c, "lunch_break_duration", 60)
+                            chosen_c_lunch = st.selectbox(
+                                f"Mensa {mus_c.name}",
+                                options=[30, 60, 90],
+                                index=[30, 60, 90].index(cur_l) if cur_l in [30, 60, 90] else 1,
+                                format_func=lambda m: f"🍝 {m} min",
+                                key=f"mus_class_lunch_sel_{mus_c.id}",
+                                label_visibility="collapsed"
+                            )
+                            mus_c.lunch_break_duration = chosen_c_lunch
+                else:
+                    st.info("Nessuna classe trovata per la sezione musicale selezionata.")
 
     with col_mus2:
         with st.container(border=True):
-            st.markdown("##### 🍝 Pausa Mensa & Rientri Pomeridiani")
+            st.markdown("##### 🍝 Pausa Mensa Generale & Impostazioni")
             lunch_opts = [30, 60, 90]
             cur_lunch = getattr(problem.config, "default_lunch_break_duration", 60)
             l_idx = lunch_opts.index(cur_lunch) if cur_lunch in lunch_opts else 1
             chosen_lunch = st.selectbox(
-                "Durata Pausa Mensa (Intervallo Pomeridiano):",
+                "Durata Pausa Mensa Predefinita di Istituto:",
                 options=lunch_opts,
                 index=l_idx,
                 format_func=lambda m: f"🍝 {m} minuti ({'mezz\'ora' if m==30 else ('1 ora' if m==60 else '1 ora e mezza')})"
             )
             problem.config.default_lunch_break_duration = chosen_lunch
-            st.caption("La pausa mensa separa visivamente e logicamente le ore antimeridiane da quelle postmeridiane (rientri).")
+            st.caption("La pausa mensa separa l'orario antimeridiano (lezioni mattutine) dai rientri pomeridiani (Orchestra, Solfeggio o altre discipline).")
+
+            st.divider()
+            st.markdown("##### 🕒 Tempo Prolungato (36 Ore)")
+            ext_classes_list = [c for c in problem.classes.values() if getattr(c, "curriculum_type", "ordinario") == "prolungato"]
+            if ext_classes_list:
+                st.success(f"Classi a Tempo Prolungato attive: **{', '.join(c.name for c in ext_classes_list)}** (36h con 2 pomeriggi)")
+                for ext_c in ext_classes_list:
+                    cur_ext_aft = getattr(ext_c, "afternoon_days", []) or ["Martedì", "Giovedì"]
+                    chosen_ext_aft = st.multiselect(
+                        f"Pomeriggi rientro {ext_c.name} (36h):",
+                        options=DAYS_OF_WEEK[:problem.config.num_days],
+                        default=[d for d in cur_ext_aft if d in DAYS_OF_WEEK[:problem.config.num_days]],
+                        key=f"ext_class_aft_sel_{ext_c.id}"
+                    )
+                    ext_c.afternoon_days = chosen_ext_aft
+            else:
+                st.info("Nessuna classe attualmente impostata a Tempo Prolungato (36h). Puoi impostarla dalla Scheda 3.")
 
     st.divider()
     render_subject_coupling_panel(problem, key_prefix="tab1")
