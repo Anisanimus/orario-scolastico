@@ -1896,18 +1896,18 @@ with st.sidebar:
         st.rerun()
 
     is_mus_act = bool(getattr(problem.config, "has_musical_curriculum", False))
-    if st.button(f"{'✅ ' if is_mus_act else ''}🎼 Tempo Musicale (32h - Corso F)", type="primary" if is_mus_act else "secondary", use_container_width=True, help="Carica scenario con Indirizzo Musicale (Corso F a 32h con Orchestra/Solfeggio e 4 docenti in compresenza: Flauto, Violino, Chitarra, Clarinetto)"):
+    if st.button(f"{'✅ ' if is_mus_act else ''}🎼 Tempo Musicale (32h - Corso F)", type="primary" if is_mus_act else "secondary", use_container_width=True, help="Carica scenario Tradizionale (NO DADA) con Indirizzo Musicale (Corso F a 32h con Orchestra/Solfeggio e 4 docenti di strumento in compresenza)"):
         st.session_state.clear()
-        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=False, num_days=5, with_musical_curriculum=True, with_extended_curriculum=False)
-        st.session_state["dada_model_active_toggle"] = True
+        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=False, with_theater=False, num_days=5, with_musical_curriculum=True, with_extended_curriculum=False)
+        st.session_state["dada_model_active_toggle"] = False
         st.session_state.result = None
         st.rerun()
 
     is_ext_act = any(getattr(c, "curriculum_type", "") == "prolungato" for c in problem.classes.values())
-    if st.button(f"{'✅ ' if is_ext_act else ''}🕒 Tempo Prolungato (36h - Corso E)", type="primary" if is_ext_act else "secondary", use_container_width=True, help="Carica scenario con Tempo Prolungato (Corso E a 36h con rientri pomeridiani e compresenze)"):
+    if st.button(f"{'✅ ' if is_ext_act else ''}🕒 Tempo Prolungato (36h - Corso E)", type="primary" if is_ext_act else "secondary", use_container_width=True, help="Carica scenario Tradizionale (NO DADA) con Tempo Prolungato (Corso E a 36h con rientri pomeridiani e compresenze)"):
         st.session_state.clear()
-        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=False, num_days=5, with_musical_curriculum=False, with_extended_curriculum=True)
-        st.session_state["dada_model_active_toggle"] = True
+        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=False, with_theater=False, num_days=5, with_musical_curriculum=False, with_extended_curriculum=True)
+        st.session_state["dada_model_active_toggle"] = False
         st.session_state.result = None
         st.rerun()
 
