@@ -84,29 +84,46 @@ TEACHER_NAMES = [
     "Prof. Costa", "Prof.ssa Giordano", "Prof. Mancini", "Prof. Rizzo"
 ]
 
-def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang: str = "Spagnolo", with_theater: bool = False, num_days: int = 5) -> TimetableProblem:
+def get_sample_problem(
+    num_classes: int = 18, 
+    is_dada: bool = False, 
+    second_lang: str = "Spagnolo", 
+    with_theater: bool = False, 
+    num_days: int = 5,
+    with_musical_curriculum: bool = True,
+    with_extended_curriculum: bool = False
+) -> TimetableProblem:
     """
     Genera un problema realistico per una scuola media con `num_classes` classi (predefinito: 18 classi)
     su 5 o 6 giorni di lezione settimanali.
+    Include supporto completo per:
+    - Indirizzo Musicale (Corso F a 32h, Orchestra/Solfeggio con fino a 4 docenti in compresenza: Flauto, Violino, Chitarra, Clarinetto)
+    - Tempo Prolungato (Corso E a 36h con rientri pomeridiani e compresenze)
     """
     if num_classes < 1:
         num_classes = 6
 
     theater_title = " (+ Teatro)" if with_theater else ""
+    musical_title = " (+ Indirizzo Musicale 32h)" if with_musical_curriculum else ""
+    extended_title = " (+ Tempo Prolungato 36h)" if with_extended_curriculum else ""
     days_title = " (Settimana 6 Giorni Lun-Sab)" if num_days == 6 else ""
     daily_h = [5, 5, 5, 5, 5, 5] if num_days == 6 else [6, 6, 6, 6, 6]
     
     config = SchoolConfig(
         num_days=num_days,
         daily_hours=daily_h,
-        school_name=f"Scuola Secondaria di I Grado 'Dante Alighieri' ({num_classes} Classi)" + (" (DADA)" if is_dada else "") + theater_title + days_title,
+        school_name=f"Scuola Secondaria di I Grado 'Dante Alighieri' ({num_classes} Classi)" + (" (DADA)" if is_dada else "") + theater_title + musical_title + extended_title + days_title,
         school_type="Secondaria I Grado (Scuola Media)",
         is_dada=is_dada,
         dada_prefer_double_hours=True,
         second_language=second_lang,
+        has_musical_curriculum=with_musical_curriculum,
+        musical_instruments=["Flauto", "Violino", "Chitarra", "Clarinetto"],
+        musical_orchestra_co_teachers=4,
+        default_lunch_break_duration=60,
         subject_block_preferences={
             "art": True, "tec": True, "mot": True, "mus": True, "spa": True, "ita": True, "mat": True,
-            "ing": False, "sci": False, "sto": False, "geo": False, "rel": False, "tea": False
+            "orch": True, "solf": True, "ing": False, "sci": False, "sto": False, "geo": False, "rel": False, "tea": False
         }
     )
     if with_theater:
@@ -134,6 +151,13 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
     if with_theater:
         subjects["tea"] = Subject(id="tea", name="Laboratorio di Teatro", color="#8e44ad", cdc="A-22 / Potenziamento")
 
+    if with_musical_curriculum:
+        subjects["orch"] = Subject(id="orch", name="Musica d'Insieme (Orchestra)", color="#d97706", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=True)
+        subjects["solf"] = Subject(id="solf", name="Teoria e Solfeggio / Lettura", color="#b45309", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=False)
+
+    if with_extended_curriculum:
+        subjects["lab_prol"] = Subject(id="lab_prol", name="Laboratorio / Compresenza Prolungato", color="#059669", cdc="A-22 / A-28", is_extended_time_discipline=True)
+
     # 2. Generazione Classi (1A, 2A, 3A, 1B, 2B, 3B, 1C, 2C, 3C...)
     classes = {}
     sections = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "L", "M", "N"]
@@ -145,7 +169,38 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
         sec_letter = sections[sec_idx]
         c_id = f"{grade_idx}{sec_letter}"
         c_name = f"{grade_idx}ª {sec_letter}"
-        classes[c_id] = SchoolClass(id=c_id, name=c_name, grade=grade_idx, section=sec_letter)
+        
+        curriculum = "ordinario"
+        target_h = 30
+        afternoons = []
+        lunch_m = 60
+
+        # Corso F: Indirizzo Musicale (32h con rientri pomeridiani personalizzati)
+        if sec_letter == "F" and with_musical_curriculum:
+            curriculum = "musicale"
+            target_h = 32
+            # Esempio: 1F al Lunedì, 2F al Martedì, 3F al Mercoledì oppure personalizzabili
+            mus_afternoon_map = {1: ["Lunedì"], 2: ["Martedì"], 3: ["Mercoledì"]}
+            afternoons = mus_afternoon_map.get(grade_idx, ["Lunedì"])
+            lunch_m = 60
+
+        # Corso E: Tempo Prolungato (36h con 2 pomeriggi)
+        elif sec_letter == "E" and with_extended_curriculum:
+            curriculum = "prolungato"
+            target_h = 36
+            afternoons = ["Martedì", "Giovedì"] # Di solito due pomeriggi
+            lunch_m = 60
+
+        classes[c_id] = SchoolClass(
+            id=c_id, 
+            name=c_name, 
+            grade=grade_idx, 
+            section=sec_letter,
+            curriculum_type=curriculum,
+            weekly_hours_target=target_h,
+            afternoon_days=afternoons,
+            lunch_break_duration=lunch_m
+        )
         class_keys.append(c_id)
         
         grade_idx += 1
@@ -595,6 +650,65 @@ def get_sample_problem(num_classes: int = 18, is_dada: bool = False, second_lang
                 max_daily_hours=1
             ))
         rel_t_idx += 1
+
+    # F. INDIRIZZO MUSICALE (32h - Corso F): 4 Docenti di Strumento (Flauto, Violino, Chitarra, Clarinetto)
+    # 2 ore per classe musicale (1F, 2F, 3F): Orchestra / Teoria con compresenza fino a 4 docenti
+    if with_musical_curriculum:
+        mus_classes = [c_id for c_id in class_keys if classes[c_id].curriculum_type == "musicale"]
+        if mus_classes:
+            # 4 Docenti di Strumento Musicale (A-56 / A-30)
+            doc_flauto = create_and_add_teacher(
+                "doc_str_flauto", "Prof.ssa Barbieri C. (Flauto)", "A-56 Strumento Musicale (Flauto)", 18,
+                is_pt=False, max_days=5, late=False
+            )
+            doc_violino = create_and_add_teacher(
+                "doc_str_violino", "Prof. Vitali E. (Violino)", "A-56 Strumento Musicale (Violino)", 18,
+                is_pt=False, max_days=5, late=False
+            )
+            doc_chitarra = create_and_add_teacher(
+                "doc_str_chitarra", "Prof.ssa Monti S. (Chitarra)", "A-56 Strumento Musicale (Chitarra)", 18,
+                is_pt=False, max_days=5, late=False
+            )
+            doc_clarinetto = create_and_add_teacher(
+                "doc_str_clarinetto", "Prof. De Luca M. (Clarinetto)", "A-56 Strumento Musicale (Clarinetto)", 18,
+                is_pt=False, max_days=5, late=False
+            )
+            
+            instrument_co_teachers = ["doc_str_violino", "doc_str_chitarra", "doc_str_clarinetto"]
+            
+            for c_mus in mus_classes:
+                # 2 ore aggiuntive per classe: 2h di Orchestra / Musica d'Insieme (oppure 1h Orch + 1h Solfeggio)
+                # con TUTTI E 4 I DOCENTI IN COMPRESENZA
+                assignments.append(TeachingAssignment(
+                    id=f"a_{c_mus}_orch_doc_str_flauto_{len(assignments)}".lower(),
+                    teacher_id="doc_str_flauto",
+                    class_id=c_mus,
+                    subject_id="orch",
+                    hours_per_week=2,
+                    force_double_hours=True,
+                    max_daily_hours=2,
+                    co_teacher_ids=instrument_co_teachers,
+                    preferred_room_id="auditorium"
+                ))
+
+    # G. TEMPO PROLUNGATO (36h - Corso E): 6 ore aggiuntive (Laboratori, Mensa, Compresenze Lettere/Matematica)
+    if with_extended_curriculum:
+        ext_classes = [c_id for c_id in class_keys if classes[c_id].curriculum_type == "prolungato"]
+        if ext_classes:
+            doc_prol = create_and_add_teacher(
+                "doc_pot_prolungato", "Prof.ssa Rinaldi B. (Compresenze Prolungato)", "A-22 / A-28", 18,
+                is_pt=False, max_days=5, late=False
+            )
+            for c_ext in ext_classes:
+                assignments.append(TeachingAssignment(
+                    id=f"a_{c_ext}_lab_prol_{len(assignments)}".lower(),
+                    teacher_id="doc_pot_prolungato",
+                    class_id=c_ext,
+                    subject_id="lab_prol",
+                    hours_per_week=6,
+                    force_double_hours=True,
+                    max_daily_hours=2
+                ))
 
     # 5. Generazione Aule della Scuola con Assegnazione Docenti (DADA Ufficiale 26 Spazi)
     if is_dada:

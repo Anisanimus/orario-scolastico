@@ -78,18 +78,24 @@ class Teacher:
 @dataclass
 class SchoolClass:
     id: str
-    name: str          # es: 1A, 2B, 3A Scientifico
-    grade: int = 1     # Anno di corso (1..5)
+    name: str          # es: 1A, 2B, 1F Musicale, 2E Prolungato
+    grade: int = 1     # Anno di corso (1..3)
     section: str = "A" # Sezione
+    curriculum_type: str = "ordinario" # "ordinario" (30h), "musicale" (32h), "prolungato" (36h)
+    weekly_hours_target: int = 30      # 30, 32 o 36 ore settimanali
+    afternoon_days: List[str] = field(default_factory=list) # Giorni di rientro pomeridiano per questa specifica classe (es. ["Lunedì", "Mercoledì"])
+    lunch_break_duration: int = 60     # Durata pausa mensa in minuti: 30, 60, 90 minuti
 
 @dataclass
 class Subject:
     id: str
-    name: str          # es: Italiano, Matematica, Scienze Motorie
+    name: str          # es: Italiano, Matematica, Scienze Motorie, Musica d'Insieme / Orchestra, Teoria e Solfeggio
     color: str = "#3498db" # Colore per visualizzazione tabellare
-    cdc: str = ""          # Classe di Concorso ministeriale (es. A-22, A-28, A-24, A-60, A-30, A-01, A-48, Religione)
-    special_room_id: Optional[str] = None # Eventuale aula fissa o laboratorio
+    cdc: str = ""          # Classe di Concorso ministeriale (es. A-22, A-28, A-24, A-60, A-30, A-56 Strumento, A-01, A-48, Religione)
+    special_room_id: Optional[str] = None # Eventuale aula fissa o laboratorio / auditorium
     default_double_hours: bool = False    # Se True, accoppia forzatamente in blocchi da 2h consecutive
+    is_musical_discipline: bool = False   # True per Orchestra, Teoria/Solfeggio, Strumento
+    is_extended_time_discipline: bool = False # True per laboratori/compresenze specifiche del tempo prolungato
 
 @dataclass
 class TeachingAssignment:
@@ -103,8 +109,9 @@ class TeachingAssignment:
     force_triple_hours: bool = False      # Richiede esplicitamente 1 blocco da 3 ore (es. tema di lettere)
     max_daily_hours: int = 2              # Max ore al giorno per questa materia in questa classe
     preferred_room_id: Optional[str] = None # Aula specifica opzionale
-    co_teacher_ids: List[str] = field(default_factory=list) # Docenti in compresenza (es. ITP, sostegno)
-    pinned_slots: List[List[int]] = field(default_factory=list) # Slot [day_idx, hour_idx] in cui QUESTA lezione (classe+materia) è bloccata/fissata a priori
+    co_teacher_ids: List[str] = field(default_factory=list) # Fino a 4 docenti in compresenza (es. i 4 docenti di strumento per Orchestra/Solfeggio o compresenze prolungato)
+    pinned_slots: List[List[int]] = field(default_factory=list) # Slot [day_idx, hour_idx] in cui QUESTA lezione è bloccata/fissata
+    preferred_time_of_day: str = "any"    # "any", "morning_only" (antimeridiana), "afternoon_only" (postmeridiana/rientro)
 
 @dataclass
 class StudentDVA:
@@ -134,7 +141,7 @@ class EnhancementAssignment:
     subject_id: str                            # Disciplina / CdC (es. "ita", "mat")
     hours_per_week: int = 18                   # Ore settimanali di potenziamento
     target_class_ids: List[str] = field(default_factory=list) # Classi su cui intervenire per compresenze/recupero
-    activity_type: str = "compresenza"         # "compresenza", "recupero", "laboratorio"
+    activity_type: str = "compresenza"         # "compresenza", "recupero", "laboratorio", "mensa"
 
 @dataclass
 class OptimizationCriteria:
@@ -182,6 +189,13 @@ class SchoolConfig:
     subject_block_preferences: Dict[str, bool] = field(default_factory=dict) # Mappa per materia: {subject_id: force_double_hours}
     allow_triple_hours_italian: bool = False # Se True, consente fino a 3h di Italiano nello stesso giorno (es. per Tema)
     force_triple_hours_italian: bool = False # Se True a livello di istituto, impone 1 blocco da 3h consecutive di Italiano per tutte le classi
+    
+    # Parametri Musicale & Tempo Prolungato
+    has_musical_curriculum: bool = False  # Se la scuola ha sezioni a indirizzo musicale (32h)
+    musical_instruments: List[str] = field(default_factory=lambda: ["Flauto", "Violino", "Chitarra", "Clarinetto"]) # 4 strumenti
+    musical_orchestra_co_teachers: int = 4 # Quanti docenti in compresenza per Orchestra / Teoria (fino a 4)
+    default_lunch_break_duration: int = 60 # 30, 60 o 90 minuti
+    
     parallel_groups: List[ParallelGroup] = field(default_factory=list) # Gruppi di Classi Aperte & Parallelismi Didattici
     support_priority_subjects_double_coverage: List[str] = field(default_factory=lambda: ["ita", "mat", "sci", "ing", "tec"]) # Materie prioritarie per compresenza/doppia copertura sostegno
     optimization_criteria: OptimizationCriteria = field(default_factory=OptimizationCriteria) # Criteri e pesi di ottimizzazione

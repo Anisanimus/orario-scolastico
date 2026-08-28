@@ -78,15 +78,16 @@ def diagnose_problem_feasibility(problem: TimetableProblem) -> List[str]:
     num_days = problem.config.num_days
     daily_hours = problem.config.daily_hours[:num_days]
     
-    # 1. Controllo Monte Ore Classi (Tassativo 30h esatte o totale slot settimanali)
+    # 1. Controllo Monte Ore Classi (Target specifico 30h, 32h Musicale, 36h Prolungato o totale slot scuola)
     for c_id, c in problem.classes.items():
+        target_class_h = getattr(c, "weekly_hours_target", tot_slots) or tot_slots
         c_h = sum(a.hours_per_week for a in problem.assignments if a.class_id == c_id)
-        if c_h != tot_slots:
-            diff = c_h - tot_slots
+        if c_h != target_class_h:
+            diff = c_h - target_class_h
             if diff > 0:
-                issues.append(f"❌ **Classe {c.name}**: ha **{c_h} ore settimanali** (+{diff}h in eccesso rispetto alle {tot_slots}h previste).")
+                issues.append(f"❌ **Classe {c.name}**: ha **{c_h} ore settimanali** (+{diff}h in eccesso rispetto alle {target_class_h}h previste per il suo indirizzo).")
             else:
-                issues.append(f"❌ **Classe {c.name}**: ha **{c_h} ore settimanali** (mancano {-diff}h per raggiungere le {tot_slots}h previste).")
+                issues.append(f"❌ **Classe {c.name}**: ha **{c_h} ore settimanali** (mancano {-diff}h per raggiungere le {target_class_h}h previste per il suo indirizzo).")
 
     # 2. Controllo Part-Time, Disponibilità e Indisponibilità Docenti
     for t_id, t in problem.teachers.items():
@@ -487,12 +488,13 @@ class TimetableSolver:
 
         # 5. Variabili e VINCOLO RIGIDO: Docenti (No sovrapposizioni e carichi giornalieri)
         # Supporta nativamente:
+        # - Compresenze multiple fino a 4 docenti (Orchestra, Solfeggio, Prolungato)
         # - Minimo 2 ore al giorno (mai 1 ora singola se presente)
         # - Massimo 5 ore in un giorno
-        # - Fino a 4 ore consecutive di fila (se 5 ore in un giorno, è imposta la pausa/buco)
+        # - Fino a 4 ore consecutive di fila
         # - Classi aperte/accorpate con docente unico
         for t_id, teacher in prob.teachers.items():
-            t_assignments = [a for a in prob.assignments if a.teacher_id == t_id]
+            t_assignments = [a for a in prob.assignments if a.teacher_id == t_id or t_id in getattr(a, "co_teacher_ids", [])]
             t_total_h = sum(a.hours_per_week for a in t_assignments)
             
             # Parametri di servizio del docente

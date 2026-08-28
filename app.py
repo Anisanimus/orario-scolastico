@@ -1887,7 +1887,23 @@ with st.sidebar:
     is_tea_act = (active_scen == "dada_theater")
     if st.button(f"{'✅ ' if is_tea_act else ''}🎭 DADA + Teatro (18 cl.)", type="primary" if is_tea_act else "secondary", use_container_width=True, help="Carica scenario demo DADA con Laboratorio Teatro attivo"):
         st.session_state.clear()
-        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=True, num_days=5)
+        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=True, num_days=5, with_musical_curriculum=False, with_extended_curriculum=False)
+        st.session_state["dada_model_active_toggle"] = True
+        st.session_state.result = None
+        st.rerun()
+
+    is_mus_act = bool(getattr(problem.config, "has_musical_curriculum", False))
+    if st.button(f"{'✅ ' if is_mus_act else ''}🎼 Tempo Musicale (32h - Corso F)", type="primary" if is_mus_act else "secondary", use_container_width=True, help="Carica scenario con Indirizzo Musicale (Corso F a 32h con Orchestra/Solfeggio e 4 docenti in compresenza: Flauto, Violino, Chitarra, Clarinetto)"):
+        st.session_state.clear()
+        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=False, num_days=5, with_musical_curriculum=True, with_extended_curriculum=False)
+        st.session_state["dada_model_active_toggle"] = True
+        st.session_state.result = None
+        st.rerun()
+
+    is_ext_act = any(getattr(c, "curriculum_type", "") == "prolungato" for c in problem.classes.values())
+    if st.button(f"{'✅ ' if is_ext_act else ''}🕒 Tempo Prolungato (36h - Corso E)", type="primary" if is_ext_act else "secondary", use_container_width=True, help="Carica scenario con Tempo Prolungato (Corso E a 36h con rientri pomeridiani e compresenze)"):
+        st.session_state.clear()
+        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=False, num_days=5, with_musical_curriculum=False, with_extended_curriculum=True)
         st.session_state["dada_model_active_toggle"] = True
         st.session_state.result = None
         st.rerun()
@@ -2647,6 +2663,47 @@ with tabs[0]:
             st.success(f"✅ Attività '{custom_act_name}' configurata con **2 Spazi Teatro Dedicati** e assegnata ai docenti di Lettere per **{added_classes} classi** (Italiano a 5h + 1h Teatro -> 30h esatte per classe e max 1-2h Teatro per docente).")
             st.rerun()
 
+    # -------------------------------------------------------------
+    # SEZIONE INDIRIZZO MUSICALE (32h) & TEMPO PROLUNGATO (36h)
+    # -------------------------------------------------------------
+    st.divider()
+    st.subheader("🎼 Indirizzo Musicale (32h) & Tempo Prolungato (36h)")
+    st.caption("Configura le sezioni a indirizzo speciale con rientri pomeridiani personalizzati, durata mensa e compresenze fino a 4 docenti.")
+
+    col_mus1, col_mus2 = st.columns(2)
+    with col_mus1:
+        with st.container(border=True):
+            st.markdown("##### 🎼 Sezione a Indirizzo Musicale (32 Ore)")
+            has_mus = st.toggle(
+                "Attiva Indirizzo Musicale nella scuola",
+                value=bool(getattr(problem.config, "has_musical_curriculum", False)),
+                key="tab1_toggle_musical_curriculum"
+            )
+            problem.config.has_musical_curriculum = has_mus
+            if has_mus:
+                st.caption("Le 2 ore aggiuntive (Orchestra / Solfeggio) possono essere collocate sia al mattino che al pomeriggio.")
+                co_doc_num = st.slider("Numero docenti in compresenza per Orchestra/Solfeggio:", min_value=1, max_value=4, value=int(getattr(problem.config, "musical_orchestra_co_teachers", 4)), step=1)
+                problem.config.musical_orchestra_co_teachers = co_doc_num
+                
+                st.markdown("**Strumenti del corso musicale**:")
+                inst_txt = st.text_input("Strumenti (separati da virgola):", value=", ".join(getattr(problem.config, "musical_instruments", ["Flauto", "Violino", "Chitarra", "Clarinetto"])))
+                problem.config.musical_instruments = [x.strip() for x in inst_txt.split(",") if x.strip()]
+
+    with col_mus2:
+        with st.container(border=True):
+            st.markdown("##### 🍝 Pausa Mensa & Rientri Pomeridiani")
+            lunch_opts = [30, 60, 90]
+            cur_lunch = getattr(problem.config, "default_lunch_break_duration", 60)
+            l_idx = lunch_opts.index(cur_lunch) if cur_lunch in lunch_opts else 1
+            chosen_lunch = st.selectbox(
+                "Durata Pausa Mensa (Intervallo Pomeridiano):",
+                options=lunch_opts,
+                index=l_idx,
+                format_func=lambda m: f"🍝 {m} minuti ({'mezz\'ora' if m==30 else ('1 ora' if m==60 else '1 ora e mezza')})"
+            )
+            problem.config.default_lunch_break_duration = chosen_lunch
+            st.caption("La pausa mensa separa visivamente e logicamente le ore antimeridiane da quelle postmeridiane (rientri).")
+
     st.divider()
     render_subject_coupling_panel(problem, key_prefix="tab1")
     st.divider()
@@ -2969,21 +3026,50 @@ with tabs[2]:
     with subtab_classi:
         st.subheader("🎓 Classi della Scuola Media")
         with st.expander("➕ Nuova Classe", expanded=False):
-            c_name = st.text_input("Nome Classe", placeholder="es. 1ª A, 2ª B, 3ª C")
-            c_grade = st.selectbox("Anno di Corso", [1, 2, 3], format_func=lambda x: f"{x}ª Media")
-            c_sec = st.text_input("Sezione", value="A")
+            c_name = st.text_input("Nome Classe", placeholder="es. 1ª A, 1ª F Musicale, 2ª E Prolungato")
+            c_c1, c_c2 = st.columns(2)
+            with c_c1:
+                c_grade = st.selectbox("Anno di Corso", [1, 2, 3], format_func=lambda x: f"{x}ª Media")
+                c_sec = st.text_input("Sezione", value="A")
+            with c_c2:
+                c_curr = st.selectbox("Indirizzo / Tempo Scuola", ["ordinario", "musicale", "prolungato"], format_func=lambda x: "🟢 Tempo Ordinario (30h)" if x=="ordinario" else ("🎼 Indirizzo Musicale (32h)" if x=="musicale" else "🕒 Tempo Prolungato (36h)"))
+                target_h_calc = 30 if c_curr=="ordinario" else (32 if c_curr=="musicale" else 36)
             
-            if st.button("Aggiungi Classe"):
+            c_afternoons = []
+            if c_curr in ["musicale", "prolungato"]:
+                c_afternoons = st.multiselect("Giorni di Rientro Pomeridiano per questa classe:", DAYS_OF_WEEK[:problem.config.num_days], default=["Lunedì"] if c_curr=="musicale" else ["Martedì", "Giovedì"])
+            
+            if st.button("Aggiungi Classe", type="primary"):
                 if c_name:
-                    c_id = c_name.replace(" ", "_").replace("ª", "")
-                    problem.classes[c_id] = SchoolClass(id=c_id, name=c_name, grade=c_grade, section=c_sec)
+                    c_id = c_name.replace(" ", "_").replace("ª", "").lower()
+                    problem.classes[c_id] = SchoolClass(
+                        id=c_id, 
+                        name=c_name, 
+                        grade=c_grade, 
+                        section=c_sec,
+                        curriculum_type=c_curr,
+                        weekly_hours_target=target_h_calc,
+                        afternoon_days=c_afternoons
+                    )
                     st.success(f"Classe {c_name} inserita!")
                     st.rerun()
                 else:
                     st.warning("Inserisci il nome della classe.")
                     
         if problem.classes:
-            classes_df = pd.DataFrame([{"ID": c.id, "Nome Classe": c.name, "Anno": f"{c.grade}ª Media", "Sezione": c.section} for c in problem.classes.values()])
+            classes_rows = []
+            for c in problem.classes.values():
+                curr_badge = "🟢 Ordinario (30h)" if getattr(c, "curriculum_type", "ordinario") == "ordinario" else ("🎼 Musicale (32h)" if c.curriculum_type == "musicale" else "🕒 Prolungato (36h)")
+                rientri_txt = ", ".join(getattr(c, "afternoon_days", [])) if getattr(c, "afternoon_days", []) else "-"
+                classes_rows.append({
+                    "ID": c.id, 
+                    "Nome Classe": c.name, 
+                    "Anno": f"{c.grade}ª Media", 
+                    "Sezione": c.section,
+                    "Indirizzo": curr_badge,
+                    "Rientri Pomeridiani": rientri_txt
+                })
+            classes_df = pd.DataFrame(classes_rows)
             st.dataframe(classes_df, use_container_width=True, hide_index=True)
             
             with st.expander("🗑️ Gestione Multipla & Cancellazione in Blocco Classi", expanded=False):
@@ -3532,6 +3618,18 @@ with tabs[4]:
             opt_double = st.checkbox("🔒 Richiedi Ore Doppie / Blocco da 2 ore", value=init_double, help="Incoraggia o forza lo svolgimento di 2 ore consecutive", key="assign_d_chk")
             opt_max_daily = st.number_input("Max ore giornaliere per questa materia", min_value=1, max_value=4, value=init_max_d, key="assign_md_inp")
             
+            # Compresenze (fino a 4 docenti, es. Orchestra Musicale, Solfeggio, Prolungato)
+            init_co_t = target_a.co_teacher_ids if is_editing_assign else []
+            co_opts = [t for t in teacher_keys if t != sel_teacher]
+            chosen_co_teachers = st.multiselect(
+                "👥 Docenti in Compresenza (fino a 4 docenti contemporanei):",
+                options=co_opts,
+                default=[ct for ct in init_co_t if ct in co_opts],
+                format_func=lambda x: problem.teachers[x].name if x in problem.teachers else x,
+                max_selections=4,
+                key="assign_co_teachers_multisel"
+            )
+            
         col_asave1, col_asave2 = st.columns([2, 1])
         with col_asave1:
             save_btn_txt = "💾 Salva Modifiche Cattedra" if is_editing_assign else "💾 Assegna Cattedra"
@@ -3543,6 +3641,7 @@ with tabs[4]:
                     target_a.hours_per_week = sel_hours
                     target_a.force_double_hours = opt_double
                     target_a.max_daily_hours = opt_max_daily
+                    target_a.co_teacher_ids = chosen_co_teachers
                     st.session_state.editing_assign_idx = None
                     st.success("Cattedra modificata con successo!")
                 else:
@@ -3554,7 +3653,8 @@ with tabs[4]:
                         subject_id=sel_subj,
                         hours_per_week=sel_hours,
                         force_double_hours=opt_double,
-                        max_daily_hours=opt_max_daily
+                        max_daily_hours=opt_max_daily,
+                        co_teacher_ids=chosen_co_teachers
                     )
                     problem.assignments.append(new_assign)
                     st.success(f"Cattedra assegnata: {problem.teachers[sel_teacher].name} → {problem.subjects[sel_subj].name} ({sel_hours}h) in {problem.classes[sel_class].name}")
@@ -3576,12 +3676,14 @@ with tabs[4]:
             
     expected_total_slots = problem.config.total_weekly_slots
 
-    # Rilevamento discrepanze classi
+    # Rilevamento discrepanze classi (rispetta monte ore per indirizzo: 30h, 32h Musicale, 36h Prolungato)
     unbalanced_classes = []
     for c_id, tot_h in class_hours.items():
-        if tot_h != expected_total_slots:
-            diff = expected_total_slots - tot_h
-            unbalanced_classes.append((problem.classes[c_id].name, tot_h, diff))
+        c_obj = problem.classes[c_id]
+        target_cl_h = getattr(c_obj, "weekly_hours_target", expected_total_slots) or expected_total_slots
+        if tot_h != target_cl_h:
+            diff = target_cl_h - tot_h
+            unbalanced_classes.append((c_obj.name, tot_h, target_cl_h, diff))
 
     # Rilevamento discrepanze docenti
     unbalanced_teachers = []
@@ -3628,14 +3730,14 @@ with tabs[4]:
         alert_col1, alert_col2 = st.columns(2)
         with alert_col1:
             if unbalanced_classes:
-                st.markdown("##### ⚠️ Classi non a 30 ore:")
-                for c_name, tot_h, diff in unbalanced_classes:
+                st.markdown("##### ⚠️ Classi con monte ore non allineato:")
+                for c_name, tot_h, target_cl_h, diff in unbalanced_classes:
                     if diff > 0:
-                        st.markdown(f"- **Classe {c_name}**: ha **{tot_h} ore** *(Mancano **{diff} ore** per arrivare a 30)*")
+                        st.markdown(f"- **Classe {c_name}**: ha **{tot_h} ore** *(Mancano **{diff} ore** per arrivare a {target_cl_h}h)*")
                     else:
-                        st.markdown(f"- **Classe {c_name}**: ha **{tot_h} ore** *(Supero di **{abs(diff)} ore** rispetto a 30)*")
+                        st.markdown(f"- **Classe {c_name}**: ha **{tot_h} ore** *(Supero di **{abs(diff)} ore** rispetto a {target_cl_h}h)*")
             else:
-                st.success("Tutte le classi quadrano perfettamente a 30 ore! ✅")
+                st.success("Tutte le classi quadrano perfettamente al loro monte ore (30h/32h/36h)! ✅")
 
         with alert_col2:
             if unbalanced_teachers:
