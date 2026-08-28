@@ -424,6 +424,17 @@ class TimetableSolver:
             assigned_slots = [self.x[a.id, d, h] for d in range(num_days) for h in range(daily_hours[d])]
             m.Add(sum(assigned_slots) == a.hours_per_week)
 
+            # Fascia oraria preferita (morning_only: ore 1-4 antimeridiane, afternoon_only: ore >= 5 pomeridiane)
+            pref_tod = getattr(a, "preferred_time_of_day", "any")
+            if pref_tod == "morning_only":
+                for d in range(num_days):
+                    for h in range(4, daily_hours[d]): # Dalla 5ª ora in poi è vietato
+                        m.Add(self.x[a.id, d, h] == 0)
+            elif pref_tod == "afternoon_only":
+                for d in range(num_days):
+                    for h in range(min(4, daily_hours[d])): # Nelle prime 4 ore è vietato
+                        m.Add(self.x[a.id, d, h] == 0)
+
         # 3. VINCOLO RIGIDO: Una classe può avere al massimo 1 lezione per ora
         for class_id in prob.classes:
             class_assignments = [a for a in prob.assignments if a.class_id == class_id]

@@ -651,43 +651,47 @@ def get_sample_problem(
             ))
         rel_t_idx += 1
 
-    # F. INDIRIZZO MUSICALE (32h - Corso F): 4 Docenti di Strumento (Flauto, Violino, Chitarra, Clarinetto)
-    # 2 ore per classe musicale (1F, 2F, 3F): Orchestra / Teoria con compresenza fino a 4 docenti
+    # F. INDIRIZZO MUSICALE (32h - Corso F): 4 Docenti di Strumento (Violino, Clarinetto, Flauto, Chitarra)
+    # Lavorano di MATTINO con 2 ore per classe alla settimana, in COMPRESENZA TUTTI E QUATTRO al Lunedì e al Mercoledì
+    # Come da modello orario:
+    # Lunedì: 2ª ora -> 1F, 3ª ora -> 2F, 4ª ora -> 3F (oppure blocchi da 2h)
+    # Mercoledì: 2ª ora -> 2B/2F, 3ª ora -> 3F, 4ª ora -> 1F
     if with_musical_curriculum:
         mus_classes = [c_id for c_id in class_keys if classes[c_id].curriculum_type == "musicale"]
         if mus_classes:
-            # 4 Docenti di Strumento Musicale (A-56 / A-30)
-            doc_flauto = create_and_add_teacher(
-                "doc_str_flauto", "Prof.ssa Barbieri C. (Flauto)", "A-56 Strumento Musicale (Flauto)", 18,
-                is_pt=False, max_days=5, late=False
-            )
+            # 4 Docenti di Strumento Musicale Reali come da Tabellone
             doc_violino = create_and_add_teacher(
-                "doc_str_violino", "Prof. Vitali E. (Violino)", "A-56 Strumento Musicale (Violino)", 18,
-                is_pt=False, max_days=5, late=False
-            )
-            doc_chitarra = create_and_add_teacher(
-                "doc_str_chitarra", "Prof.ssa Monti S. (Chitarra)", "A-56 Strumento Musicale (Chitarra)", 18,
+                "doc_str_violino", "Prof. Brutti Ilario (Violino)", "A-56 Violino", 18,
                 is_pt=False, max_days=5, late=False
             )
             doc_clarinetto = create_and_add_teacher(
-                "doc_str_clarinetto", "Prof. De Luca M. (Clarinetto)", "A-56 Strumento Musicale (Clarinetto)", 18,
+                "doc_str_clarinetto", "Prof. Carriglio Antonino (Clarinetto)", "A-56 Clarinetto", 18,
+                is_pt=False, max_days=5, late=False
+            )
+            doc_flauto = create_and_add_teacher(
+                "doc_str_flauto", "Prof.ssa Pelaez Pamela (Flauto)", "A-56 Flauto", 18,
+                is_pt=False, max_days=5, late=False
+            )
+            doc_chitarra = create_and_add_teacher(
+                "doc_str_chitarra", "Prof. Yague Yuri (Chitarra)", "A-56 Chitarra", 18,
                 is_pt=False, max_days=5, late=False
             )
             
-            instrument_co_teachers = ["doc_str_violino", "doc_str_chitarra", "doc_str_clarinetto"]
+            instrument_co_teachers = ["doc_str_clarinetto", "doc_str_flauto", "doc_str_chitarra"]
             
+            # Assegnazione Orchestra (Musica d'Insieme / Teoria) con i 4 docenti compresenti al mattino
             for c_mus in mus_classes:
-                # 2 ore aggiuntive per classe: 2h di Orchestra / Musica d'Insieme (oppure 1h Orch + 1h Solfeggio)
-                # con TUTTI E 4 I DOCENTI IN COMPRESENZA
+                # 2 ore settimanali di orchestra/solfeggio collocate al mattino (Lunedì e Mercoledì)
                 assignments.append(TeachingAssignment(
-                    id=f"a_{c_mus}_orch_doc_str_flauto_{len(assignments)}".lower(),
-                    teacher_id="doc_str_flauto",
+                    id=f"a_{c_mus}_orch_doc_str_violino_{len(assignments)}".lower(),
+                    teacher_id="doc_str_violino",
                     class_id=c_mus,
                     subject_id="orch",
                     hours_per_week=2,
-                    force_double_hours=True,
-                    max_daily_hours=2,
+                    force_double_hours=False, # Distribuite su Lunedì e Mercoledì al mattino
+                    max_daily_hours=1,
                     co_teacher_ids=instrument_co_teachers,
+                    preferred_time_of_day="morning_only",
                     preferred_room_id="auditorium"
                 ))
 
