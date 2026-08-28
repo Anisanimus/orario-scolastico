@@ -2714,14 +2714,58 @@ with tabs[0]:
                 )
                 problem.config.musical_instruments = [x.strip() for x in inst_txt.split(",") if x.strip()]
 
-                # Sincronizza le classi della sezione scelta a 32h
+                # Sincronizza le classi della sezione scelta a 32h e inietta le 2h di Orchestra se mancanti
+                orch_subj_id = "orch"
+                if orch_subj_id not in problem.subjects:
+                    problem.subjects[orch_subj_id] = Subject(id=orch_subj_id, name="Musica d'Insieme (Orchestra)", color="#d97706", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=False)
+
+                # Assicura presenza dei 4 docenti di strumento
+                inst_teachers = [
+                    ("doc_str_violino", "Prof. Brutti Ilario (Violino)", "A-56 Violino"),
+                    ("doc_str_clarinetto", "Prof. Carriglio Antonino (Clarinetto)", "A-56 Clarinetto"),
+                    ("doc_str_flauto", "Prof.ssa Pelaez Pamela (Flauto)", "A-56 Flauto"),
+                    ("doc_str_chitarra", "Prof. Yague Yuri (Chitarra)", "A-56 Chitarra")
+                ]
+                for tid, tname, tcdc in inst_teachers:
+                    if tid not in problem.teachers:
+                        problem.teachers[tid] = Teacher(
+                            id=tid, name=tname, cdc=tcdc, is_part_time=False,
+                            contract_hours=18, max_working_days=5,
+                            max_daily_hours=5, max_consecutive_hours=4, max_gap_hours=2
+                        )
+
+                co_teachers_ids = ["doc_str_clarinetto", "doc_str_flauto", "doc_str_chitarra"]
+
                 for c_id, c_obj in problem.classes.items():
                     if c_obj.section == chosen_mus_sec:
                         c_obj.curriculum_type = "musicale"
                         c_obj.weekly_hours_target = 32
+                        
+                        # Verifica se la classe ha già la cattedra di orchestra a 2h
+                        c_orch_assigns = [a for a in problem.assignments if a.class_id == c_id and a.subject_id == orch_subj_id]
+                        if not c_orch_assigns:
+                            problem.assignments.append(TeachingAssignment(
+                                id=f"a_{c_id}_orch_doc_str_violino".lower(),
+                                teacher_id="doc_str_violino",
+                                class_id=c_id,
+                                subject_id=orch_subj_id,
+                                hours_per_week=2,
+                                force_double_hours=False,
+                                max_daily_hours=1,
+                                co_teacher_ids=co_teachers_ids,
+                                preferred_time_of_day="morning_only",
+                                preferred_room_id="auditorium" if "auditorium" in problem.rooms else None
+                            ))
+                        else:
+                            for oa in c_orch_assigns:
+                                oa.hours_per_week = 2
+                                oa.co_teacher_ids = co_teachers_ids
+                                oa.preferred_time_of_day = "morning_only"
                     elif getattr(c_obj, "curriculum_type", "ordinario") == "musicale" and c_obj.section != chosen_mus_sec:
                         c_obj.curriculum_type = "ordinario"
                         c_obj.weekly_hours_target = 30
+                        # Rimuovi l'orchestra dalla vecchia classe non più musicale
+                        problem.assignments = [a for a in problem.assignments if not (a.class_id == c_id and a.subject_id == orch_subj_id)]
 
                 st.markdown("##### 📅 Scelta Pomeriggi di Rientro per Classe Musicale (32h):")
                 st.caption("Ogni classe del corso musicale può rientrare lo **stesso giorno** oppure in **giorni diversi** (es. 1F Lunedì, 2F Martedì, 3F Mercoledì):")
