@@ -24,7 +24,12 @@ def generate_excel_timetable(problem: TimetableProblem, result: TimetableResult,
     cfg = problem.config
     num_days = cfg.num_days
     days = cfg.active_days
-    daily_hours = cfg.daily_hours[:num_days]
+    daily_hours = list(cfg.daily_hours[:num_days])
+    for d in range(num_days):
+        for g_map in [result.grid_by_class, result.grid_by_teacher]:
+            for g in g_map.values():
+                if d < len(g):
+                    daily_hours[d] = max(daily_hours[d], len(g[d]))
     max_hours = max(daily_hours)
 
     # Stili
@@ -605,7 +610,12 @@ def generate_excel_tabellone_combo(problem: TimetableProblem, result: TimetableR
     cfg = problem.config
     num_days = cfg.num_days
     days = cfg.active_days
-    daily_hours = cfg.daily_hours[:num_days]
+    daily_hours = list(cfg.daily_hours[:num_days])
+    for d in range(num_days):
+        for g_map in [result.grid_by_class, result.grid_by_teacher]:
+            for g in g_map.values():
+                if d < len(g):
+                    daily_hours[d] = max(daily_hours[d], len(g[d]))
     max_hours = max(daily_hours)
 
     # Stili

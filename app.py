@@ -4936,8 +4936,16 @@ with tabs[6]:
         view_mode = st.radio("Modalità di Visualizzazione:", view_options, horizontal=True)
         
         days_active = problem.config.active_days
-        daily_hours = problem.config.daily_hours[:problem.config.num_days]
-        max_h = max(daily_hours)
+        
+        # Calcola le ore massime effettive per ciascun giorno (inclusi i pomeriggi di rientro fino a 8ª/9ª ora)
+        daily_hours = list(problem.config.daily_hours[:problem.config.num_days])
+        for d in range(len(daily_hours)):
+            for g_map in [res.grid_by_class, res.grid_by_teacher]:
+                for entity_id, g in g_map.items():
+                    if d < len(g):
+                        daily_hours[d] = max(daily_hours[d], len(g[d]))
+                        
+        max_h = max(daily_hours) if daily_hours else 6
 
         if view_mode == "📊 Tabellone Generale Docenti":
             st.subheader("📊 Tabellone Generale Docenti (1 Riga per Docente)")
