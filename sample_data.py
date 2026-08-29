@@ -112,7 +112,7 @@ def get_sample_problem(
     config = SchoolConfig(
         num_days=num_days,
         daily_hours=daily_h,
-        school_name=f"Scuola Secondaria di I Grado 'Dante Alighieri' ({num_classes} Classi)" + (" (DADA)" if is_dada else "") + theater_title + musical_title + extended_title + days_title,
+        school_name=f"Scuola Secondaria di I Grado 'Dante Alighieri' ({num_classes} Classi)",
         school_type="Secondaria I Grado (Scuola Media)",
         is_dada=is_dada,
         dada_prefer_double_hours=True,

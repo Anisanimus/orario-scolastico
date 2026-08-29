@@ -4326,11 +4326,12 @@ with tabs[5]:
     exp_slots = problem.config.total_weekly_slots
     for c_id, c in problem.classes.items():
         tot_c = sum(a.hours_per_week for a in problem.assignments if a.class_id == c_id)
-        if tot_c != exp_slots:
-            c_unbal.append((c.name, tot_c, exp_slots))
+        target_c = getattr(c, "weekly_hours_target", exp_slots) or exp_slots
+        if tot_c != target_c:
+            c_unbal.append((c.name, tot_c, target_c))
 
     if c_unbal:
-        st.warning(f"⚖️ **Nota di Quadratura**: {len(c_unbal)} classi avevano un monte ore di {c_unbal[0][1]}h (ad es. per l'aggiunta del Teatro/PTOF). Verranno compensate automaticamente a 30 ore esatte durante il calcolo.")
+        st.warning(f"⚖️ **Nota di Quadratura**: {len(c_unbal)} classi hanno un monte ore differente dal target previsto ({c_unbal[0][1]}h invece di {c_unbal[0][2]}h per {c_unbal[0][0]}).")
 
     # Controllo e Risoluzione Guidata Colli di Bottiglia Aule / Laboratori
     render_room_bottlenecks_resolver(problem, key_suffix="tab5_precheck")
