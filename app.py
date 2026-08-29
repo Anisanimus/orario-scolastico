@@ -5052,7 +5052,12 @@ with tabs[6]:
             if sel_c and sel_c in res.grid_by_class:
                 clean_sel_c = problem.classes[sel_c].name.replace("ª", "").replace(" ", "")
                 st.subheader(f"📅 Orario Settimanale - Classe {clean_sel_c}")
-                grid_html = render_html_schedule_table(days_active, daily_hours, res.grid_by_class[sel_c], view_type="class")
+                
+                # Calcola le ore giornaliere effettive per questa specifica classe (es. 8h nei giorni di rientro pomeridiano)
+                c_grid = res.grid_by_class[sel_c]
+                class_dh = [len(c_grid[d]) if d < len(c_grid) else daily_hours[d] for d in range(len(days_active))]
+                
+                grid_html = render_html_schedule_table(days_active, class_dh, c_grid, view_type="class")
                 if hasattr(st, "html"):
                     st.html(grid_html)
                 else:
@@ -5068,14 +5073,17 @@ with tabs[6]:
                 if teacher.free_day_1:
                     st.caption(f"Giorno libero richiesto: **{teacher.free_day_1}** (2ª scelta: {teacher.free_day_2 or 'Nessuna'})")
 
+                t_grid = res.grid_by_teacher[sel_t]
+                t_dh = [len(t_grid[d]) if d < len(t_grid) else daily_hours[d] for d in range(len(days_active))]
+                
                 day_has_lessons = [False] * problem.config.num_days
                 for d_idx in range(problem.config.num_days):
-                    for h in range(daily_hours[d_idx]):
+                    for h in range(t_dh[d_idx]):
                         if res.grid_by_teacher[sel_t][d_idx][h] is not None:
                             day_has_lessons[d_idx] = True
                             break
 
-                grid_html = render_html_schedule_table(days_active, daily_hours, res.grid_by_teacher[sel_t], view_type="teacher", day_has_lessons=day_has_lessons)
+                grid_html = render_html_schedule_table(days_active, t_dh, res.grid_by_teacher[sel_t], view_type="teacher", day_has_lessons=day_has_lessons)
                 if hasattr(st, "html"):
                     st.html(grid_html)
                 else:
