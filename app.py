@@ -2757,199 +2757,248 @@ with tabs[0]:
             st.rerun()
 
     # -------------------------------------------------------------
-    # SEZIONE INDIRIZZO MUSICALE (32h) & TEMPO PROLUNGATO (36h)
+    # 1. SEZIONE INDIRIZZO MUSICALE (32h) - SEPARATA E FLAGGABILE
     # -------------------------------------------------------------
     st.divider()
-    st.subheader("🎼 Indirizzo Musicale (32h) & Tempo Prolungato (36h)")
-    st.caption("Configura le sezioni a indirizzo speciale con selezione della sezione (es. Corso F), scelta dei pomeriggi di rientro per singola classe, durata mensa e fasce orarie docenti.")
+    st.subheader("🎼 1. Indirizzo Musicale (32 Ore)")
+    st.caption("Attiva e configura le sezioni a indirizzo musicale (32h/settimana con 2h di Orchestra/Musica d'Insieme, 4 docenti di strumento in compresenza e rientri pomeridiani).")
 
-    col_mus1, col_mus2 = st.columns([1.2, 1.0])
-    with col_mus1:
-        with st.container(border=True):
-            st.markdown("##### 🎼 Sezione a Indirizzo Musicale (32 Ore)")
+    with st.container(border=True):
+        col_m_tog, col_m_info = st.columns([1.5, 2.5])
+        with col_m_tog:
             has_mus = st.toggle(
-                "Attiva Indirizzo Musicale nella scuola",
+                "🎼 **Attiva Indirizzo Musicale (32h)**",
                 value=bool(getattr(problem.config, "has_musical_curriculum", False)),
                 key="tab1_toggle_musical_curriculum"
             )
             problem.config.has_musical_curriculum = has_mus
+        with col_m_info:
             if has_mus:
-                # Scelta della sezione musicale (es. Corso F)
-                all_sections = sorted(list(set(c.section for c in problem.classes.values()))) if problem.classes else ["A", "B", "C", "D", "E", "F"]
-                cur_mus_sec = "F" if "F" in all_sections else (all_sections[0] if all_sections else "F")
-                
-                c_m_sec, c_m_co = st.columns(2)
-                with c_m_sec:
-                    chosen_mus_sec = st.selectbox(
-                        "Sezione Attiva a Indirizzo Musicale (32h):",
-                        options=all_sections,
-                        index=all_sections.index(cur_mus_sec) if cur_mus_sec in all_sections else 0,
-                        help="Tutte le classi di questa sezione (es. 1F, 2F, 3F) avranno orario a 32h settimanali con le 2h di Orchestra/Musica d'Insieme."
-                    )
-                with c_m_co:
-                    co_doc_num = st.slider(
-                        "Docenti in compresenza per Orchestra:", 
-                        min_value=1, max_value=4, 
-                        value=int(getattr(problem.config, "musical_orchestra_co_teachers", 4)), 
-                        step=1,
-                        help="Numero di docenti di strumento compresenti contemporaneamente nelle 2h di Orchestra / Solfeggio."
-                    )
-                    problem.config.musical_orchestra_co_teachers = co_doc_num
+                st.success("✅ **Indirizzo Musicale Attivo**: le classi della sezione musicale effettuano 32 ore settimanali.")
+            else:
+                st.info("ℹ️ Indirizzo Musicale disattivato.")
 
-                st.markdown("##### 🎻 Strumenti del Corso Musicale:")
-                inst_txt = st.text_input(
-                    "Strumenti musicali attivi (separati da virgola):", 
-                    value=", ".join(getattr(problem.config, "musical_instruments", ["Flauto", "Violino", "Chitarra", "Clarinetto"])),
-                    help="I 4 strumenti della scuola con cattedra A-56 / A-30."
+        if has_mus:
+            all_sections = sorted(list(set(c.section for c in problem.classes.values()))) if problem.classes else ["A", "B", "C", "D", "E", "F"]
+            cur_mus_sec = getattr(problem.config, "musical_section", "") or ("F" if "F" in all_sections else (all_sections[0] if all_sections else "F"))
+            if cur_mus_sec not in all_sections and all_sections:
+                cur_mus_sec = all_sections[0]
+
+            c_m_sec, c_m_co = st.columns(2)
+            with c_m_sec:
+                chosen_mus_sec = st.selectbox(
+                    "Sezione a Indirizzo Musicale (32h):",
+                    options=all_sections,
+                    index=all_sections.index(cur_mus_sec) if cur_mus_sec in all_sections else 0,
+                    help="Tutte le classi di questa sezione (es. 1F, 2F, 3F) avranno orario a 32h settimanali con 2h di Orchestra/Musica d'Insieme."
                 )
-                problem.config.musical_instruments = [x.strip() for x in inst_txt.split(",") if x.strip()]
+                problem.config.musical_section = chosen_mus_sec
+            with c_m_co:
+                co_doc_num = st.slider(
+                    "Docenti in compresenza per Orchestra:", 
+                    min_value=1, max_value=4, 
+                    value=int(getattr(problem.config, "musical_orchestra_co_teachers", 4)), 
+                    step=1,
+                    help="Numero di docenti di strumento compresenti contemporaneamente nelle 2h di Orchestra / Solfeggio."
+                )
+                problem.config.musical_orchestra_co_teachers = co_doc_num
 
-                # Sincronizza le classi della sezione scelta a 32h e inietta le 2h di Orchestra se mancanti
-                orch_subj_id = "orch"
-                solf_subj_id = "solf"
-                if orch_subj_id not in problem.subjects:
-                    problem.subjects[orch_subj_id] = Subject(id=orch_subj_id, name="Musica d'Insieme (Orchestra)", color="#d97706", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=False)
-                if solf_subj_id not in problem.subjects:
-                    problem.subjects[solf_subj_id] = Subject(id=solf_subj_id, name="Teoria e Solfeggio / Lettura", color="#b45309", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=False)
-
-                # Assicura presenza dei 4 docenti di strumento
-                inst_teachers = [
-                    ("doc_str_violino", "Prof. Brutti Ilario (Violino)", "A-56 Violino"),
-                    ("doc_str_clarinetto", "Prof. Carriglio Antonino (Clarinetto)", "A-56 Clarinetto"),
-                    ("doc_str_flauto", "Prof.ssa Pelaez Pamela (Flauto)", "A-56 Flauto"),
-                    ("doc_str_chitarra", "Prof. Yague Yuri (Chitarra)", "A-56 Chitarra")
-                ]
-                for tid, tname, tcdc in inst_teachers:
-                    if tid not in problem.teachers:
-                        problem.teachers[tid] = Teacher(
-                            id=tid, name=tname, cdc=tcdc, is_part_time=False,
-                            contract_hours=18, max_working_days=5,
-                            max_daily_hours=5, max_consecutive_hours=4, max_gap_hours=2
-                        )
-
-                co_teachers_ids = ["doc_str_clarinetto", "doc_str_flauto", "doc_str_chitarra"]
-
-                for c_id, c_obj in problem.classes.items():
-                    if c_obj.section == chosen_mus_sec:
-                        c_obj.curriculum_type = "musicale"
-                        c_obj.weekly_hours_target = 32
-                        
-                        # Verifica se la classe ha già la cattedra di orchestra a 2h
-                        c_orch_assigns = [a for a in problem.assignments if a.class_id == c_id and a.subject_id == orch_subj_id]
-                        if not c_orch_assigns:
-                            problem.assignments.append(TeachingAssignment(
-                                id=f"a_{c_id}_orch_doc_str_violino".lower(),
-                                teacher_id="doc_str_violino",
-                                class_id=c_id,
-                                subject_id=orch_subj_id,
-                                hours_per_week=2,
-                                force_double_hours=False,
-                                max_daily_hours=1,
-                                co_teacher_ids=co_teachers_ids,
-                                preferred_time_of_day="any",
-                                preferred_room_id="auditorium" if "auditorium" in problem.rooms else None
-                            ))
-                        else:
-                            for oa in c_orch_assigns:
-                                oa.hours_per_week = 2
-                                oa.co_teacher_ids = co_teachers_ids
-                                oa.preferred_time_of_day = "any"
-                    elif getattr(c_obj, "curriculum_type", "ordinario") == "musicale" and c_obj.section != chosen_mus_sec:
-                        c_obj.curriculum_type = "ordinario"
-                        c_obj.weekly_hours_target = 30
-                        # Rimuovi l'orchestra dalla vecchia classe non più musicale
-                        problem.assignments = [a for a in problem.assignments if not (a.class_id == c_id and a.subject_id == orch_subj_id)]
-
-                st.markdown("##### 📅 Scelta Pomeriggi di Rientro per Classe Musicale (32h):")
-                st.caption("Ogni classe del corso musicale può rientrare lo **stesso giorno** oppure in **giorni diversi** (es. 1F Lunedì, 2F Martedì, 3F Mercoledì):")
-                
-                mus_classes_list = [c for c in problem.classes.values() if c.section == chosen_mus_sec or c.curriculum_type == "musicale"]
-                if mus_classes_list:
-                    for mus_c in mus_classes_list:
-                        c_col_n, c_col_d, c_col_m = st.columns([1.2, 2.0, 1.2])
-                        with c_col_n:
-                            st.markdown(f"**Classe {mus_c.name}** *(32h)*")
-                        with c_col_d:
-                            cur_aft = getattr(mus_c, "afternoon_days", []) or ["Lunedì"]
-                            chosen_aft = st.multiselect(
-                                f"Pomeriggi rientro {mus_c.name}",
-                                options=DAYS_OF_WEEK[:problem.config.num_days],
-                                default=[d for d in cur_aft if d in DAYS_OF_WEEK[:problem.config.num_days]] or [DAYS_OF_WEEK[0]],
-                                key=f"mus_class_aft_sel_{mus_c.id}",
-                                label_visibility="collapsed"
-                            )
-                            mus_c.afternoon_days = chosen_aft
-                        with c_col_m:
-                            cur_l = getattr(mus_c, "lunch_break_duration", 60)
-                            c_lunch_opts = [0, 30, 60, 90]
-                            chosen_c_lunch = st.selectbox(
-                                f"Mensa {mus_c.name}",
-                                options=c_lunch_opts,
-                                index=c_lunch_opts.index(cur_l) if cur_l in c_lunch_opts else 2,
-                                format_func=lambda m: "🚫 No Mensa (7ªh lez.)" if m == 0 else f"🍝 {m} min",
-                                key=f"mus_class_lunch_sel_{mus_c.id}",
-                                label_visibility="collapsed"
-                            )
-                            mus_c.lunch_break_duration = chosen_c_lunch
-
-                    st.markdown("---")
-                    st.markdown("##### 📌 Fissaggio Esatto Slot Orari Compresenza (Orchestra & Solfeggio):")
-                    # Mappa di default realistica senza conflitti docente (Lunedì pomeriggio + Mercoledì mattino)
-                    default_pin_schedule = {
-                        1: {"d1": 0, "h1": 6, "d2": 2, "h2": 3}, # 1F: Lun 7ª ora (h=6), Mer 4ª ora (h=3)
-                        2: {"d1": 0, "h1": 7, "d2": 2, "h2": 1}, # 2F: Lun 8ª ora (h=7), Mer 2ª ora (h=1)
-                        3: {"d1": 0, "h1": 8, "d2": 2, "h2": 2}, # 3F: Lun 9ª ora (h=8), Mer 3ª ora (h=2)
-                    }
-                    
-                    for mus_c in mus_classes_list:
-                        c_orch_assign = next((a for a in problem.assignments if a.class_id == mus_c.id and a.subject_id in ["orch", "solf"]), None)
-                        if c_orch_assign:
-                            cur_pins = getattr(c_orch_assign, "pinned_slots", []) or []
-                            c_p_title, c_p_d1, c_p_h1, c_p_d2, c_p_h2 = st.columns([1.5, 1.3, 1.1, 1.3, 1.1])
-                            def_sch = default_pin_schedule.get(mus_c.grade, {"d1": 0, "h1": 1, "d2": 2, "h2": 2})
-                            
-                            with c_p_title:
-                                st.markdown(f"🎼 **Compresenza {mus_c.name}** *(2h)*")
-                            with c_p_d1:
-                                p1_d = cur_pins[0][0] if len(cur_pins) > 0 and cur_pins[0][0] < problem.config.num_days else def_sch["d1"]
-                                sel_d1 = st.selectbox(f"1ªh Giorno {mus_c.name}", DAYS_OF_WEEK[:problem.config.num_days], index=p1_d, key=f"pin_mus_d1_{mus_c.id}", label_visibility="collapsed")
-                                idx_d1 = DAYS_OF_WEEK.index(sel_d1)
-                            with c_p_h1:
-                                max_h1 = max(9, problem.config.daily_hours[idx_d1] if idx_d1 < len(problem.config.daily_hours) else 6)
-                                p1_h = min(cur_pins[0][1], max_h1 - 1) if len(cur_pins) > 0 else min(def_sch["h1"], max_h1 - 1)
-                                sel_h1 = st.selectbox(f"1ªh Ora {mus_c.name}", list(range(max_h1)), index=p1_h, format_func=lambda x: f"{x+1}ª ora", key=f"pin_mus_h1_{mus_c.id}", label_visibility="collapsed")
-                            with c_p_d2:
-                                p2_d = cur_pins[1][0] if len(cur_pins) > 1 and cur_pins[1][0] < problem.config.num_days else def_sch["d2"]
-                                sel_d2 = st.selectbox(f"2ªh Giorno {mus_c.name}", DAYS_OF_WEEK[:problem.config.num_days], index=p2_d, key=f"pin_mus_d2_{mus_c.id}", label_visibility="collapsed")
-                                idx_d2 = DAYS_OF_WEEK.index(sel_d2)
-                            with c_p_h2:
-                                max_h2 = max(9, problem.config.daily_hours[idx_d2] if idx_d2 < len(problem.config.daily_hours) else 6)
-                                p2_h = min(cur_pins[1][1], max_h2 - 1) if len(cur_pins) > 1 else min(def_sch["h2"], max_h2 - 1)
-                                sel_h2 = st.selectbox(f"2ªh Ora {mus_c.name}", list(range(max_h2)), index=p2_h, format_func=lambda x: f"{x+1}ª ora", key=f"pin_mus_h2_{mus_c.id}", label_visibility="collapsed")
-                            
-                            # Salva i pin su questa cattedra di orchestra
-                            new_pins = [[idx_d1, sel_h1], [idx_d2, sel_h2]]
-                            c_orch_assign.pinned_slots = new_pins
-                else:
-                    st.info("Nessuna classe trovata per la sezione musicale selezionata.")
-
-    with col_mus2:
-        with st.container(border=True):
-            st.markdown("##### 🍝 Pausa Mensa Generale & Impostazioni")
-            lunch_opts = [0, 30, 60, 90]
-            cur_lunch = getattr(problem.config, "default_lunch_break_duration", 60)
-            l_idx = lunch_opts.index(cur_lunch) if cur_lunch in lunch_opts else 2
-            chosen_lunch = st.selectbox(
-                "Durata Pausa Mensa Predefinita di Istituto:",
-                options=lunch_opts,
-                index=l_idx,
-                format_func=lambda m: "🚫 Nessuna Mensa (Lezione continua alla 7ª Ora)" if m == 0 else f"🍝 {m} minuti ({'mezz\'ora' if m==30 else ('1 ora' if m==60 else '1 ora e mezza')})"
+            st.markdown("##### 🎻 Strumenti del Corso Musicale:")
+            inst_txt = st.text_input(
+                "Strumenti musicali attivi (separati da virgola):", 
+                value=", ".join(getattr(problem.config, "musical_instruments", ["Flauto", "Violino", "Chitarra", "Clarinetto"])),
+                help="I 4 strumenti della scuola con cattedra A-56 / A-30."
             )
-            problem.config.default_lunch_break_duration = chosen_lunch
-            st.caption("Selezionando 'Nessuna Mensa', la 7ª ora è una normale ora di lezione consecutiva senza interruzione.")
+            problem.config.musical_instruments = [x.strip() for x in inst_txt.split(",") if x.strip()]
 
-            st.divider()
-            st.markdown("##### 🕒 Tempo Prolungato (36 Ore)")
+            # Sincronizza le classi della sezione scelta a 32h e inietta le 2h di Orchestra se mancanti
+            orch_subj_id = "orch"
+            solf_subj_id = "solf"
+            if orch_subj_id not in problem.subjects:
+                problem.subjects[orch_subj_id] = Subject(id=orch_subj_id, name="Musica d'Insieme (Orchestra)", color="#d97706", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=False)
+            if solf_subj_id not in problem.subjects:
+                problem.subjects[solf_subj_id] = Subject(id=solf_subj_id, name="Teoria e Solfeggio / Lettura", color="#b45309", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=False)
+
+            # Assicura presenza dei 4 docenti di strumento
+            inst_teachers = [
+                ("doc_str_violino", "Prof. Brutti Ilario (Violino)", "A-56 Violino"),
+                ("doc_str_clarinetto", "Prof. Carriglio Antonino (Clarinetto)", "A-56 Clarinetto"),
+                ("doc_str_flauto", "Prof.ssa Pelaez Pamela (Flauto)", "A-56 Flauto"),
+                ("doc_str_chitarra", "Prof. Yague Yuri (Chitarra)", "A-56 Chitarra")
+            ]
+            for tid, tname, tcdc in inst_teachers:
+                if tid not in problem.teachers:
+                    problem.teachers[tid] = Teacher(
+                        id=tid, name=tname, cdc=tcdc, is_part_time=False,
+                        contract_hours=18, max_working_days=5,
+                        max_daily_hours=5, max_consecutive_hours=4, max_gap_hours=2
+                    )
+
+            co_teachers_ids = ["doc_str_clarinetto", "doc_str_flauto", "doc_str_chitarra"]
+
+            for c_id, c_obj in problem.classes.items():
+                if c_obj.section == chosen_mus_sec:
+                    c_obj.curriculum_type = "musicale"
+                    c_obj.weekly_hours_target = 32
+                    
+                    # Verifica se la classe ha già la cattedra di orchestra a 2h
+                    c_orch_assigns = [a for a in problem.assignments if a.class_id == c_id and a.subject_id == orch_subj_id]
+                    if not c_orch_assigns:
+                        problem.assignments.append(TeachingAssignment(
+                            id=f"a_{c_id}_orch_doc_str_violino".lower(),
+                            teacher_id="doc_str_violino",
+                            class_id=c_id,
+                            subject_id=orch_subj_id,
+                            hours_per_week=2,
+                            force_double_hours=False,
+                            max_daily_hours=1,
+                            co_teacher_ids=co_teachers_ids,
+                            preferred_time_of_day="any",
+                            preferred_room_id="auditorium" if "auditorium" in problem.rooms else None
+                        ))
+                    else:
+                        for oa in c_orch_assigns:
+                            oa.hours_per_week = 2
+                            oa.co_teacher_ids = co_teachers_ids
+                            oa.preferred_time_of_day = "any"
+                elif getattr(c_obj, "curriculum_type", "ordinario") == "musicale" and c_obj.section != chosen_mus_sec:
+                    c_obj.curriculum_type = "ordinario"
+                    c_obj.weekly_hours_target = 30
+                    # Rimuovi l'orchestra dalla vecchia classe non più musicale
+                    problem.assignments = [a for a in problem.assignments if not (a.class_id == c_id and a.subject_id == orch_subj_id)]
+
+            st.markdown("##### 📅 Pomeriggi di Rientro & Mensa per Classe Musicale:")
+            mus_classes_list = [c for c in problem.classes.values() if c.section == chosen_mus_sec or c.curriculum_type == "musicale"]
+            if mus_classes_list:
+                for mus_c in mus_classes_list:
+                    c_col_n, c_col_d, c_col_m = st.columns([1.2, 2.0, 1.2])
+                    with c_col_n:
+                        st.markdown(f"**Classe {mus_c.name}** *(32h)*")
+                    with c_col_d:
+                        cur_aft = getattr(mus_c, "afternoon_days", []) or ["Lunedì"]
+                        chosen_aft = st.multiselect(
+                            f"Pomeriggi rientro {mus_c.name}",
+                            options=DAYS_OF_WEEK[:problem.config.num_days],
+                            default=[d for d in cur_aft if d in DAYS_OF_WEEK[:problem.config.num_days]] or [DAYS_OF_WEEK[0]],
+                            key=f"mus_class_aft_sel_{mus_c.id}",
+                            label_visibility="collapsed"
+                        )
+                        mus_c.afternoon_days = chosen_aft
+                    with c_col_m:
+                        cur_l = getattr(mus_c, "lunch_break_duration", 60)
+                        c_lunch_opts = [0, 30, 60, 90]
+                        chosen_c_lunch = st.selectbox(
+                            f"Mensa {mus_c.name}",
+                            options=c_lunch_opts,
+                            index=c_lunch_opts.index(cur_l) if cur_l in c_lunch_opts else 2,
+                            format_func=lambda m: "🚫 No Mensa (7ªh lez.)" if m == 0 else f"🍝 {m} min",
+                            key=f"mus_class_lunch_sel_{mus_c.id}",
+                            label_visibility="collapsed"
+                        )
+                        mus_c.lunch_break_duration = chosen_c_lunch
+
+                st.markdown("---")
+                st.markdown("##### 📌 Fissaggio Esatto Slot Orari Compresenza (Orchestra & Solfeggio):")
+                default_pin_schedule = {
+                    1: {"d1": 0, "h1": 6, "d2": 2, "h2": 3},
+                    2: {"d1": 0, "h1": 7, "d2": 2, "h2": 1},
+                    3: {"d1": 0, "h1": 8, "d2": 2, "h2": 2},
+                }
+                
+                for mus_c in mus_classes_list:
+                    c_orch_assign = next((a for a in problem.assignments if a.class_id == mus_c.id and a.subject_id in ["orch", "solf"]), None)
+                    if c_orch_assign:
+                        cur_pins = getattr(c_orch_assign, "pinned_slots", []) or []
+                        c_p_title, c_p_d1, c_p_h1, c_p_d2, c_p_h2 = st.columns([1.5, 1.3, 1.1, 1.3, 1.1])
+                        def_sch = default_pin_schedule.get(mus_c.grade, {"d1": 0, "h1": 1, "d2": 2, "h2": 2})
+                        
+                        with c_p_title:
+                            st.markdown(f"🎼 **Compresenza {mus_c.name}** *(2h)*")
+                        with c_p_d1:
+                            p1_d = cur_pins[0][0] if len(cur_pins) > 0 and cur_pins[0][0] < problem.config.num_days else def_sch["d1"]
+                            sel_d1 = st.selectbox(f"1ªh Giorno {mus_c.name}", DAYS_OF_WEEK[:problem.config.num_days], index=p1_d, key=f"pin_mus_d1_{mus_c.id}", label_visibility="collapsed")
+                            idx_d1 = DAYS_OF_WEEK.index(sel_d1)
+                        with c_p_h1:
+                            max_h1 = max(9, problem.config.daily_hours[idx_d1] if idx_d1 < len(problem.config.daily_hours) else 6)
+                            p1_h = min(cur_pins[0][1], max_h1 - 1) if len(cur_pins) > 0 else min(def_sch["h1"], max_h1 - 1)
+                            sel_h1 = st.selectbox(f"1ªh Ora {mus_c.name}", list(range(max_h1)), index=p1_h, format_func=lambda x: f"{x+1}ª ora", key=f"pin_mus_h1_{mus_c.id}", label_visibility="collapsed")
+                        with c_p_d2:
+                            p2_d = cur_pins[1][0] if len(cur_pins) > 1 and cur_pins[1][0] < problem.config.num_days else def_sch["d2"]
+                            sel_d2 = st.selectbox(f"2ªh Giorno {mus_c.name}", DAYS_OF_WEEK[:problem.config.num_days], index=p2_d, key=f"pin_mus_d2_{mus_c.id}", label_visibility="collapsed")
+                            idx_d2 = DAYS_OF_WEEK.index(sel_d2)
+                        with c_p_h2:
+                            max_h2 = max(9, problem.config.daily_hours[idx_d2] if idx_d2 < len(problem.config.daily_hours) else 6)
+                            p2_h = min(cur_pins[1][1], max_h2 - 1) if len(cur_pins) > 1 else min(def_sch["h2"], max_h2 - 1)
+                            sel_h2 = st.selectbox(f"2ªh Ora {mus_c.name}", list(range(max_h2)), index=p2_h, format_func=lambda x: f"{x+1}ª ora", key=f"pin_mus_h2_{mus_c.id}", label_visibility="collapsed")
+                        
+                        new_pins = [[idx_d1, sel_h1], [idx_d2, sel_h2]]
+                        c_orch_assign.pinned_slots = new_pins
+            else:
+                st.info("Nessuna classe trovata per la sezione musicale selezionata.")
+        else:
+            # Se disattivato, ripristina le classi musicali a 30h ordinarie
+            for c_obj in problem.classes.values():
+                if getattr(c_obj, "curriculum_type", "ordinario") == "musicale":
+                    c_obj.curriculum_type = "ordinario"
+                    c_obj.weekly_hours_target = 30
+            problem.assignments = [a for a in problem.assignments if a.subject_id not in ["orch", "solf"]]
+
+    # -------------------------------------------------------------
+    # 2. SEZIONE TEMPO PROLUNGATO (36h) - SEPARATA E FLAGGABILE
+    # -------------------------------------------------------------
+    st.divider()
+    st.subheader("🕒 2. Tempo Prolungato (36 Ore)")
+    st.caption("Attiva e configura le sezioni o classi a tempo prolungato (36h/settimana con 2 rientri pomeridiani e mensa).")
+
+    with st.container(border=True):
+        col_p_tog, col_p_info = st.columns([1.5, 2.5])
+        with col_p_tog:
+            has_ext = st.toggle(
+                "🕒 **Attiva Tempo Prolungato (36h)**",
+                value=bool(getattr(problem.config, "has_extended_curriculum", False)) or any(getattr(c, "curriculum_type", "") == "prolungato" for c in problem.classes.values()),
+                key="tab1_toggle_extended_curriculum"
+            )
+            problem.config.has_extended_curriculum = has_ext
+        with col_p_info:
+            if has_ext:
+                st.success("✅ **Tempo Prolungato Attivo**: configurazione 36h settimanali con 2 rientri pomeridiani.")
+            else:
+                st.info("ℹ️ Tempo Prolungato disattivato.")
+
+        if has_ext:
+            all_sections_ext = sorted(list(set(c.section for c in problem.classes.values()))) if problem.classes else ["A", "B", "C", "D", "E", "F"]
+            cur_ext_sec = getattr(problem.config, "extended_section", "") or ("D" if "D" in all_sections_ext else (all_sections_ext[0] if all_sections_ext else "D"))
+            if cur_ext_sec not in all_sections_ext and all_sections_ext:
+                cur_ext_sec = all_sections_ext[0]
+
+            c_ext_s1, c_ext_s2 = st.columns(2)
+            with c_ext_s1:
+                chosen_ext_sec = st.selectbox(
+                    "Sezione a Tempo Prolungato (36h):",
+                    options=["Tutte Selezionate Manualmente"] + all_sections_ext,
+                    index=(all_sections_ext.index(cur_ext_sec) + 1) if cur_ext_sec in all_sections_ext else 0,
+                    help="Seleziona un'intera sezione da impostare a 36h, oppure scegli le singole classi."
+                )
+                if chosen_ext_sec != "Tutte Selezionate Manualmente":
+                    problem.config.extended_section = chosen_ext_sec
+                    for c_obj in problem.classes.values():
+                        if c_obj.section == chosen_ext_sec and getattr(c_obj, "curriculum_type", "") != "musicale":
+                            c_obj.curriculum_type = "prolungato"
+                            c_obj.weekly_hours_target = 36
+
+            with c_ext_s2:
+                ext_lunch_opts = [0, 30, 60, 90]
+                cur_ext_l = getattr(problem.config, "default_lunch_break_duration", 60)
+                sel_ext_lunch = st.selectbox(
+                    "Pausa Mensa Tempo Prolungato:",
+                    options=ext_lunch_opts,
+                    index=ext_lunch_opts.index(cur_ext_l) if cur_ext_l in ext_lunch_opts else 2,
+                    format_func=lambda m: "🚫 Nessuna Mensa (7ª Ora continua)" if m == 0 else f"🍝 {m} minuti ({'mezz\'ora' if m==30 else ('1 ora' if m==60 else '1 ora e mezza')})",
+                    key="ext_lunch_sel_box"
+                )
+
+            # Selezione classi a tempo prolungato e relativi pomeriggi
+            st.markdown("##### 📅 Pomeriggi di Rientro per Classi a Tempo Prolungato (36h):")
             ext_classes_list = [c for c in problem.classes.values() if getattr(c, "curriculum_type", "ordinario") == "prolungato"]
             if ext_classes_list:
                 st.success(f"Classi a Tempo Prolungato attive: **{', '.join(c.name for c in ext_classes_list)}** (36h con 2 pomeriggi)")
@@ -2964,6 +3013,12 @@ with tabs[0]:
                     ext_c.afternoon_days = chosen_ext_aft
             else:
                 st.info("Nessuna classe attualmente impostata a Tempo Prolungato (36h). Puoi impostarla dalla Scheda 3.")
+        else:
+            # Se disattivato, ripristina le classi a tempo prolungato a 30h ordinarie
+            for c_obj in problem.classes.values():
+                if getattr(c_obj, "curriculum_type", "ordinario") == "prolungato":
+                    c_obj.curriculum_type = "ordinario"
+                    c_obj.weekly_hours_target = 30
 
     st.divider()
     render_subject_coupling_panel(problem, key_prefix="tab1")

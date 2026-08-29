@@ -191,10 +191,12 @@ class SchoolConfig:
     force_triple_hours_italian: bool = False # Se True a livello di istituto, impone 1 blocco da 3h consecutive di Italiano per tutte le classi
     
     # Parametri Musicale & Tempo Prolungato
-    has_musical_curriculum: bool = False  # Se la scuola ha sezioni a indirizzo musicale (32h)
-    musical_section: str = ""             # Sezione dedicata all'indirizzo musicale (es. "F")
+    has_musical_curriculum: bool = False   # Se la scuola ha sezioni a indirizzo musicale (32h)
+    musical_section: str = ""              # Sezione dedicata all'indirizzo musicale (es. "F")
     musical_instruments: List[str] = field(default_factory=lambda: ["Flauto", "Violino", "Chitarra", "Clarinetto"]) # 4 strumenti
     musical_orchestra_co_teachers: int = 4 # Quanti docenti in compresenza per Orchestra / Teoria (fino a 4)
+    has_extended_curriculum: bool = False  # Se la scuola ha sezioni a tempo prolungato (36h)
+    extended_section: str = ""             # Sezione dedicata al tempo prolungato (es. "D" o "E")
     default_lunch_break_duration: int = 60 # 30, 60 o 90 minuti
     
     parallel_groups: List[ParallelGroup] = field(default_factory=list) # Gruppi di Classi Aperte & Parallelismi Didattici
