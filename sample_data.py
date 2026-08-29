@@ -9,7 +9,7 @@ Monte ore e cattedre perfette al 100%:
 from typing import Dict, List, Optional, Tuple
 from models import (
     SchoolConfig, Teacher, SchoolClass, Subject, Classroom, 
-    TeachingAssignment, TimetableProblem, DAYS_OF_WEEK,
+    TeachingAssignment, TimetableProblem, DAYS_OF_WEEK, ParallelGroup,
     StudentDVA, SupportAssignment, EnhancementAssignment
 )
 
@@ -976,8 +976,9 @@ def get_sample_problem(
                 is_special_lab=False,
                 priority=1
             )
-        rooms["bebe_vio"] = Classroom(id="bebe_vio", name="Palestra BEBE VIO (Principale)", subject_ids=["mot"], capacity=1, is_special_lab=True, priority=1)
-        rooms["palestra_muratori"] = Classroom(id="palestra_muratori", name="Palestra MURATORI (Secondaria / Emergenza)", subject_ids=["mot"], capacity=1, is_special_lab=True, priority=2)
+        rooms["bebe_vio"] = Classroom(id="bebe_vio", name="Palestra BEBE VIO (Unica Palestra)", subject_ids=["mot"], capacity=2 if with_musical_curriculum else 1, is_special_lab=True, priority=1)
+        if not with_musical_curriculum:
+            rooms["palestra_muratori"] = Classroom(id="palestra_muratori", name="Palestra MURATORI (Secondaria / Emergenza)", subject_ids=["mot"], capacity=1, is_special_lab=True, priority=2)
         rooms["lab_arte"] = Classroom(id="lab_arte", name="Laboratorio di Arte (Principale)", subject_ids=["art"], capacity=1, is_special_lab=True, priority=1)
         rooms["lab_arte_2"] = Classroom(id="lab_arte_2", name="Laboratorio di Arte (Secondario)", subject_ids=["art"], capacity=1, is_special_lab=True, priority=2)
         rooms["lab_informatica"] = Classroom(id="lab_informatica", name="Laboratorio di Informatica (Principale)", subject_ids=["tec"], capacity=1, is_special_lab=True, priority=1)
@@ -989,6 +990,25 @@ def get_sample_problem(
         if with_theater:
             rooms["teatro"] = Classroom(id="teatro", name="Laboratorio di Teatro (Spazio Principale)", subject_ids=["tea", "app_custom"], capacity=1, is_special_lab=True, priority=1)
             rooms["auditorium"] = Classroom(id="auditorium", name="Auditorium (Spazio Secondario)", subject_ids=["tea", "app_custom"], capacity=1, is_special_lab=True, priority=2)
+
+    # Parallelismo Scienze Motorie sulle classi Terze (es. 3A con 3B, 3C con 3D, 3E con 3F)
+    if with_musical_curriculum:
+        third_grade_classes = [c_id for c_id in class_keys if classes[c_id].grade == 3]
+        pg_list = []
+        for i in range(0, len(third_grade_classes), 2):
+            pair_c = third_grade_classes[i:i+2]
+            if len(pair_c) == 2:
+                pg_list.append(ParallelGroup(
+                    id=f"pg_mot_3_{i//2 + 1}",
+                    name=f"Parallelismo Motoria Terze ({classes[pair_c[0]].name} + {classes[pair_c[1]].name})",
+                    subject_id="mot",
+                    class_ids=pair_c,
+                    parallel_hours=2,
+                    force_consecutive_block=True,
+                    room_id="bebe_vio",
+                    is_active=True
+                ))
+        config.parallel_groups = pg_list
 
     # 6. Alunni DVA (23 Casi: max 2 per classe, 16 a 18h [6 gravi], 7 a 9h)
     students_dva = {}
