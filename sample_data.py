@@ -677,6 +677,19 @@ def get_sample_problem(
             
             instrument_co_teachers = ["doc_str_clarinetto", "doc_str_flauto", "doc_str_chitarra"]
             
+            # Mappa slot reali fissati:
+            # 1F: Lunedì 2ª ora, Mercoledì 4ª ora
+            # 2F: Lunedì 3ª ora, Mercoledì 2ª ora
+            # 3F: Lunedì 4ª ora, Mercoledì 3ª ora
+            class_slots_preset = {
+                "1F": [[0, 1], [2, 3]],
+                "2F": [[0, 2], [2, 1]],
+                "3F": [[0, 3], [2, 2]],
+                "1f": [[0, 1], [2, 3]],
+                "2f": [[0, 2], [2, 1]],
+                "3f": [[0, 3], [2, 2]],
+            }
+            
             # Assegnazione Orchestra (Musica d'Insieme / Teoria) con i 4 docenti compresenti al mattino
             for c_mus in mus_classes:
                 # 2 ore settimanali di orchestra/solfeggio collocate al mattino (Lunedì e Mercoledì)
@@ -690,7 +703,8 @@ def get_sample_problem(
                     max_daily_hours=1,
                     co_teacher_ids=instrument_co_teachers,
                     preferred_time_of_day="morning_only",
-                    preferred_room_id="auditorium"
+                    preferred_room_id="auditorium",
+                    pinned_slots=class_slots_preset.get(c_mus, [[0, 1], [2, 3]])
                 ))
 
     # G. TEMPO PROLUNGATO (36h - Corso E): 6 ore aggiuntive (Laboratori, Mensa, Compresenze Lettere/Matematica)
