@@ -192,6 +192,7 @@ class SchoolConfig:
     
     # Parametri Musicale & Tempo Prolungato
     has_musical_curriculum: bool = False  # Se la scuola ha sezioni a indirizzo musicale (32h)
+    musical_section: str = ""             # Sezione dedicata all'indirizzo musicale (es. "F")
     musical_instruments: List[str] = field(default_factory=lambda: ["Flauto", "Violino", "Chitarra", "Clarinetto"]) # 4 strumenti
     musical_orchestra_co_teachers: int = 4 # Quanti docenti in compresenza per Orchestra / Teoria (fino a 4)
     default_lunch_break_duration: int = 60 # 30, 60 o 90 minuti

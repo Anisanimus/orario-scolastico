@@ -118,6 +118,7 @@ def get_sample_problem(
         dada_prefer_double_hours=True,
         second_language=second_lang,
         has_musical_curriculum=with_musical_curriculum,
+        musical_section="F" if with_musical_curriculum else "",
         musical_instruments=["Flauto", "Violino", "Chitarra", "Clarinetto"],
         musical_orchestra_co_teachers=4,
         default_lunch_break_duration=60,
