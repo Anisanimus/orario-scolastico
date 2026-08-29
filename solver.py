@@ -53,6 +53,7 @@ class TimetableResult:
     double_hours_satisfied: int = 0
     double_hours_total: int = 0
     double_hours_by_subject: Dict[str, Dict[str, Any]] = field(default_factory=dict) # Dettaglio per materia flaggata
+    double_hours_by_teacher: Dict[str, Dict[str, Any]] = field(default_factory=dict) # Dettaglio per docente con cattedre a 2h forzate
     triple_hours_satisfied: int = 0
     triple_hours_total: int = 0
     triple_hours_pct: int = 100
@@ -1313,7 +1314,52 @@ class TimetableSolver:
                 res.double_hours_total += tot_count
                 res.double_hours_satisfied += sat_count
 
-        # 3bis. Blocco da 3 Ore Consecutive (Tema di Italiano)
+        # 3-bis. Ore doppie verificate per SINGOLO DOCENTE (Cattedre forzate a 2h dal selettore docente)
+        res.double_hours_by_teacher = {}
+        for t_id, teacher in prob.teachers.items():
+            t_forced_assigns = [
+                a for a in prob.assignments
+                if (a.teacher_id == t_id or t_id in a.co_teacher_ids) and a.force_double_hours and a.hours_per_week >= 2
+            ]
+            if not t_forced_assigns:
+                continue
+
+            t_sat = 0
+            t_tot = len(t_forced_assigns)
+            t_details = []
+
+            for a in t_forced_assigns:
+                s_name = prob.subjects[a.subject_id].name if a.subject_id in prob.subjects else a.subject_id
+                c_name = prob.classes[a.class_id].name if a.class_id in prob.classes else a.class_id
+                has_adj = False
+                for d in range(num_days):
+                    for h in range(daily_hours[d] - 1):
+                        if active_solver.Value(self.x[a.id, d, h]) == 1 and active_solver.Value(self.x[a.id, d, h + 1]) == 1:
+                            has_adj = True
+                            break
+                    if has_adj:
+                        break
+                if has_adj:
+                    t_sat += 1
+                t_details.append({
+                    "assignment_id": a.id,
+                    "class_name": c_name,
+                    "subject_name": s_name,
+                    "hours_per_week": a.hours_per_week,
+                    "is_satisfied": has_adj
+                })
+
+            t_pct = round(t_sat / t_tot * 100) if t_tot > 0 else 100
+            res.double_hours_by_teacher[t_id] = {
+                "name": teacher.name,
+                "cdc": getattr(teacher, "cdc", ""),
+                "total": t_tot,
+                "satisfied": t_sat,
+                "pct": t_pct,
+                "details": t_details
+            }
+
+        # 3ter. Blocco da 3 Ore Consecutive (Tema di Italiano)
         force_triple_ita = getattr(prob.config, "force_triple_hours_italian", False)
         ita_assignments = [a for a in prob.assignments if a.subject_id in ["ita", "lettere", "italiano"] and (getattr(a, "force_triple_hours", False) or force_triple_ita)]
         if ita_assignments:

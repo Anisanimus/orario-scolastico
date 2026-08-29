@@ -4660,14 +4660,16 @@ with tabs[5]:
 
         # Dettaglio per materia accorpata (flaggate vs non flaggate nel Tab 1)
         sub_blocks_info = getattr(res, "double_hours_by_subject", {})
-        if sub_blocks_info:
-            st.markdown("##### 🔗 Dettaglio Accorpamento Discipline (Riferito alle materie flaggate nel Tab 1)")
-            flagged_items = [v for v in sub_blocks_info.values() if v.get("is_flagged")]
-            unflagged_items = [v for v in sub_blocks_info.values() if not v.get("is_flagged")]
+        teacher_blocks_info = getattr(res, "double_hours_by_teacher", {})
+        
+        if sub_blocks_info or teacher_blocks_info:
+            st.markdown("##### 🔗 Dettaglio Accorpamento Discipline & Docenti (Blocchi da 2 Ore Consecutive)")
+            flagged_items = [v for v in sub_blocks_info.values() if v.get("is_flagged")] if sub_blocks_info else []
+            unflagged_items = [v for v in sub_blocks_info.values() if not v.get("is_flagged")] if sub_blocks_info else []
             
             dc1, dc2 = st.columns(2)
             with dc1:
-                st.markdown("**🔒 Materie Flaggate (Blocchi da 2 Ore Richiesti):**")
+                st.markdown("**🔒 Materie Flaggate a livello di Istituto:**")
                 if flagged_items:
                     for f_item in flagged_items:
                         s_name = f_item['name']
@@ -4688,7 +4690,7 @@ with tabs[5]:
                         else:
                             st.write(f"- 🟡 **Italiano (Blocco da 3h - Tema)**: **{trip_sat} / {trip_tot} classi** in blocco da 3h consecutive ({trip_pct}% soddisfatto)")
                 else:
-                    st.caption("Nessuna materia flaggata per l'accorpamento a 2 ore.")
+                    st.caption("Nessuna materia flaggata per l'accorpamento a 2 ore a livello di istituto.")
                     
             with dc2:
                 st.markdown("**🔓 Materie NON Flaggate (Ore Singole Separate):**")
@@ -4697,6 +4699,28 @@ with tabs[5]:
                         st.write(f"- ℹ️ **{u_item['name']}**: suddivisa ad ore singole su giorni diversi (1h al giorno)")
                 else:
                     st.caption("Tutte le materie da 2h+ sono state flaggate come accorpate.")
+
+            # Sezione specifica per Doppie Ore Forzate per Singolo Docente
+            if teacher_blocks_info:
+                st.markdown("##### 👤 Doppie Ore Forzate per Docente Singolo")
+                t_cols = st.columns(min(len(teacher_blocks_info), 3) if len(teacher_blocks_info) > 0 else 1)
+                for idx_tb, (tb_tid, tb_data) in enumerate(teacher_blocks_info.items()):
+                    col_target = t_cols[idx_tb % len(t_cols)]
+                    with col_target:
+                        with st.container(border=True):
+                            tb_name = tb_data["name"]
+                            tb_cdc = f"[{tb_data['cdc']}] " if tb_data.get("cdc") else ""
+                            tb_sat = tb_data["satisfied"]
+                            tb_tot = tb_data["total"]
+                            tb_pct = tb_data["pct"]
+                            
+                            badge = "🟢 100%" if tb_pct == 100 else f"🟡 {tb_pct}%"
+                            st.markdown(f"**👤 {tb_cdc}{tb_name}** — {badge}")
+                            st.write(f"**{tb_sat} / {tb_tot} cattedre** in blocco da 2h consecutive")
+                            
+                            for det in tb_data.get("details", []):
+                                c_sat_icon = "✅" if det["is_satisfied"] else "❌"
+                                st.caption(f"{c_sat_icon} **Classe {det['class_name']}** - {det['subject_name']} ({det['hours_per_week']}h)")
 
         # Seconda riga metriche per desiderata orari avanzati
         late_tot = getattr(res, "late_entry_total", 0)
