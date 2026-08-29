@@ -2851,7 +2851,7 @@ with tabs[0]:
                                 sel_d1 = st.selectbox(f"1ªh Giorno {mus_c.name}", DAYS_OF_WEEK[:problem.config.num_days], index=p1_d, key=f"pin_mus_d1_{mus_c.id}", label_visibility="collapsed")
                                 idx_d1 = DAYS_OF_WEEK.index(sel_d1)
                             with c_p_h1:
-                                max_h1 = get_safe_daily_hours(problem, idx_d1)
+                                max_h1 = max(9, problem.config.daily_hours[idx_d1] if idx_d1 < len(problem.config.daily_hours) else 6)
                                 p1_h = min(cur_pins[0][1], max_h1 - 1) if len(cur_pins) > 0 else min(def_sch["h1"], max_h1 - 1)
                                 sel_h1 = st.selectbox(f"1ªh Ora {mus_c.name}", list(range(max_h1)), index=p1_h, format_func=lambda x: f"{x+1}ª ora", key=f"pin_mus_h1_{mus_c.id}", label_visibility="collapsed")
                             with c_p_d2:
@@ -2859,7 +2859,7 @@ with tabs[0]:
                                 sel_d2 = st.selectbox(f"2ªh Giorno {mus_c.name}", DAYS_OF_WEEK[:problem.config.num_days], index=p2_d, key=f"pin_mus_d2_{mus_c.id}", label_visibility="collapsed")
                                 idx_d2 = DAYS_OF_WEEK.index(sel_d2)
                             with c_p_h2:
-                                max_h2 = get_safe_daily_hours(problem, idx_d2)
+                                max_h2 = max(9, problem.config.daily_hours[idx_d2] if idx_d2 < len(problem.config.daily_hours) else 6)
                                 p2_h = min(cur_pins[1][1], max_h2 - 1) if len(cur_pins) > 1 else min(def_sch["h2"], max_h2 - 1)
                                 sel_h2 = st.selectbox(f"2ªh Ora {mus_c.name}", list(range(max_h2)), index=p2_h, format_func=lambda x: f"{x+1}ª ora", key=f"pin_mus_h2_{mus_c.id}", label_visibility="collapsed")
                             
