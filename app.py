@@ -1105,6 +1105,7 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
         "Seconda Lingua Comunitaria (Spagnolo / Francese / Tedesco)",
         "Tecnologia",
         "Musica",
+        "A-56 Strumento Musicale / Musica d'Insieme (Orchestra & Solfeggio)",
         "Arte e Immagine",
         "Scienze Motorie e Sportive",
         "Religione Cattolica",
@@ -1159,9 +1160,10 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
                     "subject_id": a.subject_id,
                     "hours_per_week": a.hours_per_week,
                     "force_double_hours": problem.config.subject_block_preferences.get(a.subject_id, a.force_double_hours) if (hasattr(problem.config, "subject_block_preferences") and problem.config.subject_block_preferences and a.subject_id in problem.config.subject_block_preferences) else a.force_double_hours,
-                    "max_daily_hours": a.max_daily_hours
+                    "max_daily_hours": a.max_daily_hours,
+                    "co_teacher_ids": getattr(a, "co_teacher_ids", [])
                 }
-                for a in problem.assignments if a.teacher_id == target_t.id
+                for a in problem.assignments if (a.teacher_id == target_t.id or target_t.id in getattr(a, "co_teacher_ids", []))
             ]
         else:
             st.session_state[temp_key] = []
@@ -1542,13 +1544,18 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
                 problem.teachers[t_id] = updated_t
                 
                 old_pins_by_key = {}
+                old_co_by_key = {}
                 for old_a in problem.assignments:
                     if old_a.teacher_id == t_id and getattr(old_a, "pinned_slots", []):
                         old_pins_by_key[(old_a.class_id, old_a.subject_id)] = old_a.pinned_slots
+                    if getattr(old_a, "co_teacher_ids", []):
+                        old_co_by_key[(old_a.class_id, old_a.subject_id)] = old_a.co_teacher_ids
     
                 problem.assignments = [a for a in problem.assignments if a.teacher_id != t_id]
                 if not is_support_teacher:
                     for idx_a, item in enumerate(temp_assigns):
+                        # Se questa cattedra era una compresenza con un altro docente titolare, mantieni il titolare e la compresenza
+                        item_co = item.get("co_teacher_ids", []) or old_co_by_key.get((item["class_id"], item["subject_id"]), [])
                         assign_id = f"a_{t_id}_{item['class_id']}_{item['subject_id']}_{idx_a}".lower().replace(" ", "_")
                         saved_pins = old_pins_by_key.get((item["class_id"], item["subject_id"]), [])
                         problem.assignments.append(TeachingAssignment(
@@ -1560,7 +1567,9 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
                             force_double_hours=item.get("force_double_hours", False),
                             force_triple_hours=item.get("force_triple_hours", False),
                             max_daily_hours=item.get("max_daily_hours", 2),
-                            pinned_slots=saved_pins
+                            pinned_slots=saved_pins,
+                            co_teacher_ids=item_co,
+                            preferred_time_of_day="morning_only" if (item["subject_id"] in ["orch", "solf"]) else "any"
                         ))
     
                 # Pulisci tutti i widget memorizzati per questo docente
@@ -2716,8 +2725,11 @@ with tabs[0]:
 
                 # Sincronizza le classi della sezione scelta a 32h e inietta le 2h di Orchestra se mancanti
                 orch_subj_id = "orch"
+                solf_subj_id = "solf"
                 if orch_subj_id not in problem.subjects:
                     problem.subjects[orch_subj_id] = Subject(id=orch_subj_id, name="Musica d'Insieme (Orchestra)", color="#d97706", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=False)
+                if solf_subj_id not in problem.subjects:
+                    problem.subjects[solf_subj_id] = Subject(id=solf_subj_id, name="Teoria e Solfeggio / Lettura", color="#b45309", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=False)
 
                 # Assicura presenza dei 4 docenti di strumento
                 inst_teachers = [
@@ -3022,7 +3034,7 @@ with tabs[1]:
                     giorno_libero_str = "-"
     
             req_count = len(getattr(t, "required_slots", []))
-            t_assigns = [a for a in problem.assignments if a.teacher_id == tid]
+            t_assigns = [a for a in problem.assignments if a.teacher_id == tid or tid in getattr(a, "co_teacher_ids", [])]
             pinned_count = sum(len(getattr(a, "pinned_slots", [])) for a in t_assigns)
     
             desiderata_tags = []
@@ -3059,7 +3071,9 @@ with tabs[1]:
             else:
                 assigned_classes_names = sorted(list(set(problem.classes[a.class_id].name if a.class_id in problem.classes else a.class_id for a in t_assigns)))
                 tot_h_assigned = sum(a.hours_per_week for a in t_assigns)
-                classes_txt = f"📚 *Classi: {', '.join(assigned_classes_names)} ({tot_h_assigned}h)*" if assigned_classes_names else "📚 *Nessuna classe assegnata*"
+                has_co = any(tid in getattr(a, "co_teacher_ids", []) for a in t_assigns)
+                co_tag = " *(in compresenza)*" if (has_co and not any(a.teacher_id == tid for a in t_assigns)) else ""
+                classes_txt = f"📚 *Classi: {', '.join(assigned_classes_names)} ({tot_h_assigned}h{co_tag})*" if assigned_classes_names else "📚 *Nessuna classe assegnata*"
             t_subjs_str = get_teacher_subjects_display(t, problem)
             pt_badge = " ⏱️ `[PART-TIME]`" if is_pt else ""
     

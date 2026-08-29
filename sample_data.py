@@ -145,15 +145,13 @@ def get_sample_problem(
         "mus": Subject(id="mus", name="Musica", color="#f39c12", cdc="A-30"),
         "art": Subject(id="art", name="Arte e Immagine", color="#e84393", cdc="A-01"),
         "mot": Subject(id="mot", name="Scienze Motorie", color="#00b894", cdc="A-48"),
-        "rel": Subject(id="rel", name="Religione", color="#7f8c8d", cdc="Religione")
+        "rel": Subject(id="rel", name="Religione", color="#7f8c8d", cdc="Religione"),
+        "orch": Subject(id="orch", name="Musica d'Insieme (Orchestra)", color="#d97706", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=True),
+        "solf": Subject(id="solf", name="Teoria e Solfeggio / Lettura", color="#b45309", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=False)
     }
 
     if with_theater:
         subjects["tea"] = Subject(id="tea", name="Laboratorio di Teatro", color="#8e44ad", cdc="A-22 / Potenziamento")
-
-    if with_musical_curriculum:
-        subjects["orch"] = Subject(id="orch", name="Musica d'Insieme (Orchestra)", color="#d97706", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=True)
-        subjects["solf"] = Subject(id="solf", name="Teoria e Solfeggio / Lettura", color="#b45309", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=False)
 
     if with_extended_curriculum:
         subjects["lab_prol"] = Subject(id="lab_prol", name="Laboratorio / Compresenza Prolungato", color="#059669", cdc="A-22 / A-28", is_extended_time_discipline=True)
