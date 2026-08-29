@@ -308,7 +308,7 @@ def render_subject_coupling_panel(problem: TimetableProblem, key_prefix: str = "
         sel_t_id = st.selectbox(
             "Seleziona Docente per gestire i Blocchi da 2 Ore:",
             options=t_options,
-            format_func=lambda tid: f"👤 {problem.teachers[tid].name} ({problem.teachers[tid].subject_area or 'Docente'})",
+            format_func=lambda tid: f"👤 {problem.teachers[tid].name} ({getattr(problem.teachers[tid], 'cdc', '') or 'Docente'})",
             key=f"{key_prefix}_sel_teacher_coupling"
         )
         
