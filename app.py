@@ -2253,12 +2253,11 @@ Il solutore rispetta automaticamente 4 regole categoriche per tutti i docenti:
 
 tabs = st.tabs([
     "⚙️ 1. Struttura & Indirizzi",
-    "👥 2. Docenti & Cattedre",
-    "🏫 3. Classi, Materie & Spazi",
-    "🤝 4. Sostegno & DVA",
-    "📊 5. Quadratura Cattedre",
-    "🚀 6. Genera Orario",
-    "📅 7. Visualizza & Esporta"
+    "🏫 2. Classi & Aule",
+    "👥 3. Docenti & Cattedre",
+    "🔗 4. Blocchi 2h/3h & Paralleli",
+    "♿ 5. Sostegno & DVA",
+    "🚀 6. Genera Orario"
 ])
 
 # =============================================================
@@ -2697,10 +2696,7 @@ with tabs[0]:
                     c_obj.curriculum_type = "ordinario"
                     c_obj.weekly_hours_target = 30
 
-    st.divider()
-    render_subject_coupling_panel(problem, key_prefix="tab1")
-    st.divider()
-    render_parallel_classes_panel(problem, key_prefix="tab1")
+
 
 # =============================================================
 # TAB 2: DOCENTI & DESIDERATA PERSONALI
@@ -3018,11 +3014,12 @@ with tabs[1]:
             problem.assignments = demo_p.assignments
             st.rerun()
     
-    # =============================================================
-# TAB 3: CLASSI, MATERIE & AULE / LABORATORI
 # =============================================================
-with tabs[2]:
-    st.header("🏫 Gestione Classi, Materie & Aule / Laboratori")
+# TAB 2: CLASSI, MATERIE & AULE / LABORATORI
+# =============================================================
+with tabs[1]:
+    st.header("🏫 Gestione Classi & Aule / Laboratori")
+    st.caption("Configura le classi e le sezioni della scuola, e definisci gli spazi didattici con la loro capienza.")
     st.caption("Configura le classi, le materie, le aule/laboratori con docenti assegnati e il quadro didattico del consiglio di classe.")
     
     subtab_classi, subtab_materie, subtab_aule, subtab_consigli = st.tabs([
@@ -3582,17 +3579,23 @@ with tabs[2]:
         else:
             st.info("Aggiungi prima almeno una classe per poterne definire il consiglio di classe e le materie.")
     
-    # =============================================================
-# TAB 4: SOSTEGNO, DVA & POTENZIAMENTO
+# =============================================================
+# TAB 4: BLOCCHI DA 2 E 3 ORE & PARALLELISMI DIDATTICI
 # =============================================================
 with tabs[3]:
-    render_support_management_tab(problem)
+    st.header("🔗 Blocchi 2h/3h & Parallelismi Didattici")
+    st.caption("Configura per ciascuna materia o docente le forzature a blocchi da 2 o 3 ore consecutive e i parallelismi orari (es. palestre o classi aperte).")
+    
+    render_subject_coupling_panel(problem, key_prefix="tab4_blocks")
+    st.divider()
+    render_parallel_classes_panel(problem, key_prefix="tab4_parallels")
 
 # =============================================================
-# TAB 5: QUADRATURA CATTEDRE & MONTE ORE
+# TAB 5: SOSTEGNO, DVA & POTENZIAMENTO
 # =============================================================
 with tabs[4]:
-    st.header("📊 Quadratura Cattedre & Monte Ore")
+    st.header("♿ Sostegno Didattico, DVA & Potenziamento")
+    render_support_management_tab(problem)
     st.write("Verifica l'allineamento delle **30 ore per classe** e la copertura delle cattedre (**18h / Part-Time**) di tutti i docenti.")
 
     if "editing_assign_idx" not in st.session_state:
@@ -4650,27 +4653,18 @@ with tabs[5]:
         # -------------------------------------------------------------
         # SEZIONE RITOCCHI MANUALI, SMART REPAIR & UPLOAD EXCEL
         # -------------------------------------------------------------
-        st.divider()
-        render_manual_editor_and_import_panel(problem)
-
         # -------------------------------------------------------------
         # SEZIONE GENERATORE SOSTEGNO & POTENZIAMENTO
         # -------------------------------------------------------------
         st.divider()
         render_support_solver_section(problem, st.session_state.get("result", res))
 
-# =============================================================
-# TAB 7: VISUALIZZA & ESPORTA
-# =============================================================
-with tabs[6]:
-    st.header("📅 Visualizzazione e Download dell'Orario")
-    
-    res: Optional[TimetableResult] = st.session_state.get("result")
-    if not res or res.status not in ["OPTIMAL", "FEASIBLE", "IMPORTED"]:
-        st.info("Nessun orario calcolato o importato al momento. Vai nella scheda '🚀 Genera Orario' per avviare il calcolo o caricare un file Excel!")
-    else:
-        st.markdown("##### 📥 Esportazione Documenti Ufficiali (Excel & PDF Alta Definizione)")
-        st.caption("Scarica i prospetti orari completi in formato Excel modificabile o in eleganti PDF A4 Orizzontali pronti per la stampa (1 griglia per pagina).")
+        # -------------------------------------------------------------
+        # SEZIONE VISUALIZZA & ESPORTA TABELLONI
+        # -------------------------------------------------------------
+        st.divider()
+        st.subheader("📅 Visualizzazione e Download dell'Orario")
+        st.caption("Scarica i prospetti orari completi in formato Excel modificabile o in eleganti PDF A4 Orizzontali pronti per la stampa.")
         
         sup_res_obj = st.session_state.get("support_result")
         
