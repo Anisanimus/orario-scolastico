@@ -127,16 +127,17 @@ def render_subject_coupling_panel(problem: TimetableProblem, key_prefix: str = "
         st.info("Nessuna materia configurata.")
         return
 
-    # Inizializza preferenze di default se vuote
+    # Inizializza preferenze di default se vuote (Default: solo Scienze Motorie e Italiano)
     if not hasattr(problem.config, "subject_block_preferences") or not problem.config.subject_block_preferences:
         problem.config.subject_block_preferences = {
-            "art": True, "tec": True, "mot": True, "mus": True, "spa": True, "ita": True, "mat": True,
+            "ita": True, "mot": True,
+            "art": False, "tec": False, "mus": False, "spa": False, "mat": False,
             "ing": False, "sci": False, "sto": False, "geo": False, "rel": False
         }
 
     preset_state_key = f"{key_prefix}_active_coupling_preset"
     if preset_state_key not in st.session_state:
-        st.session_state[preset_state_key] = "std"
+        st.session_state[preset_state_key] = "custom"
 
     cur_p = st.session_state[preset_state_key]
 
@@ -294,8 +295,71 @@ def render_subject_coupling_panel(problem: TimetableProblem, key_prefix: str = "
             help="Permette al solutore di accorpare fino a 3 ore di Italiano se utile, senza renderlo un vincolo forzato su tutte le classi."
         )
 
-    if st.session_state.get(force_ita_key, False):
-        st.success("✅ **Regola d'Istituto Attiva**: Tutte le classi e le schede dei docenti di Lettere (A-22) sono configurate con il vincolo forzato di **1 blocco da 3 ore consecutive di Italiano**!")
+    st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
+    st.markdown("##### 👤 Coppie Forzate per Docente (Blocchi da 2 Ore per Insegnante)")
+    st.caption("Seleziona un singolo docente dal menu a tendina per forzare a 2 ore consecutive le sue cattedre (anche se la materia è impostata a ore singole a livello di istituto).")
+
+    if not problem.teachers:
+        st.info("Nessun docente registrato nel database.")
+    else:
+        sorted_teachers = sorted(problem.teachers.values(), key=lambda t: t.name)
+        t_options = [t.id for t in sorted_teachers]
+        
+        sel_t_id = st.selectbox(
+            "Seleziona Docente per gestire i Blocchi da 2 Ore:",
+            options=t_options,
+            format_func=lambda tid: f"👤 {problem.teachers[tid].name} ({problem.teachers[tid].subject_area or 'Docente'})",
+            key=f"{key_prefix}_sel_teacher_coupling"
+        )
+        
+        if sel_t_id:
+            t_obj = problem.teachers[sel_t_id]
+            t_assigns = [a for a in problem.assignments if a.teacher_id == sel_t_id or sel_t_id in getattr(a, "co_teacher_ids", [])]
+            
+            if not t_assigns:
+                st.info(f"Nessuna cattedra assegnata a {t_obj.name}.")
+            else:
+                c_tc1, c_tc2 = st.columns([1.5, 2.5])
+                with c_tc1:
+                    st.markdown(f"**Cattedre di {t_obj.name}** *(Totale: {sum(a.hours_per_week for a in t_assigns)}h)*")
+                    # Bottone rapido per forzare tutte le cattedre di questo docente a 2h
+                    all_forced = all(a.force_double_hours for a in t_assigns if a.hours_per_week >= 2)
+                    btn_label = "🔓 Disattiva Blocchi 2h per Tutto il Docente" if all_forced else "⚡ Forza Blocchi 2h su Tutte le sue Cattedre"
+                    if st.button(btn_label, key=f"{key_prefix}_btn_toggle_all_{sel_t_id}", use_container_width=True):
+                        new_val = not all_forced
+                        for a in t_assigns:
+                            if a.hours_per_week >= 2:
+                                a.force_double_hours = new_val
+                                a.max_daily_hours = 2 if new_val else (1 if a.hours_per_week in [2, 3] else 2)
+                        st.session_state["block_prefs_version"] = st.session_state.get("block_prefs_version", 0) + 1
+                        st.session_state.result = None
+                        st.rerun()
+
+                with c_tc2:
+                    t_bp_v = st.session_state.get("block_prefs_version", 0)
+                    for a_item in t_assigns:
+                        s_name = problem.subjects[a_item.subject_id].name if a_item.subject_id in problem.subjects else a_item.subject_id
+                        c_name = problem.classes[a_item.class_id].name if a_item.class_id in problem.classes else a_item.class_id
+                        w_key_a = f"{key_prefix}_t_assign_dbl_{a_item.id}_{t_bp_v}"
+                        
+                        can_dbl = (a_item.hours_per_week >= 2)
+                        if w_key_a not in st.session_state:
+                            st.session_state[w_key_a] = bool(a_item.force_double_hours)
+
+                        def on_teacher_assign_toggle(assign_obj=a_item, wkey=w_key_a):
+                            v_flag = bool(st.session_state[wkey])
+                            assign_obj.force_double_hours = v_flag
+                            assign_obj.max_daily_hours = 2 if v_flag else (1 if assign_obj.hours_per_week in [2, 3] else 2)
+                            st.session_state.result = None
+
+                        st.checkbox(
+                            f"**Classe {c_name}** - {s_name} ({a_item.hours_per_week}h/settimana)",
+                            key=w_key_a,
+                            value=bool(a_item.force_double_hours),
+                            disabled=(not can_dbl),
+                            on_change=on_teacher_assign_toggle,
+                            help=f"Forza il docente a svolgere le ore di {s_name} in classe {c_name} a blocchi di 2 ore consecutive."
+                        )
 
 def render_parallel_classes_panel(problem: TimetableProblem, key_prefix: str = "main"):
     """Pannello interattivo per la configurazione delle Classi Aperte & Parallelismi Didattici."""

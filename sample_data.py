@@ -123,7 +123,8 @@ def get_sample_problem(
         musical_orchestra_co_teachers=4,
         default_lunch_break_duration=60,
         subject_block_preferences={
-            "art": True, "tec": True, "mot": True, "mus": True, "spa": True, "ita": True, "mat": True,
+            "ita": True, "mot": True,
+            "art": False, "tec": False, "mus": False, "spa": False, "mat": False,
             "orch": False, "solf": False, "ing": False, "sci": False, "sto": False, "geo": False, "rel": False, "tea": False
         }
     )
@@ -546,7 +547,7 @@ def get_sample_problem(
                     soft_slots=soft_slots
                 )
                 for c_k in current_sub_classes:
-                    f_dbl = bool(s_force_dbl)
+                    f_dbl = bool(config.subject_block_preferences.get(s_code, False))
                     assignments.append(TeachingAssignment(
                         id=f"a_{c_k}_{s_code}_{t_id}_{len(assignments)}".lower(),
                         teacher_id=t_id,
@@ -573,7 +574,7 @@ def get_sample_problem(
                 late=(t_idx % 2 == 1)
             )
             for c_k in current_sub_classes:
-                f_dbl = bool(s_force_dbl)
+                f_dbl = bool(config.subject_block_preferences.get(s_code, False))
                 assignments.append(TeachingAssignment(
                     id=f"a_{c_k}_{s_code}_{t_id}_{len(assignments)}".lower(),
                     teacher_id=t_id,
@@ -581,7 +582,7 @@ def get_sample_problem(
                     subject_id=s_code,
                     hours_per_week=2,
                     force_double_hours=f_dbl,
-                    max_daily_hours=2
+                    max_daily_hours=2 if f_dbl else 1
                 ))
             t_idx += 1
 
@@ -990,10 +991,11 @@ def get_sample_problem(
             rooms["teatro"] = Classroom(id="teatro", name="Laboratorio di Teatro (Spazio Principale)", subject_ids=["tea", "app_custom"], capacity=1, is_special_lab=True, priority=1)
             rooms["auditorium"] = Classroom(id="auditorium", name="Auditorium (Spazio Secondario)", subject_ids=["tea", "app_custom"], capacity=1, is_special_lab=True, priority=2)
 
-    # Parallelismo Scienze Motorie sulle classi Terze (es. 3A con 3B, 3C con 3D, 3E con 3F)
+    # Parallelismi didattici predefiniti nello scenario:
+    pg_list = []
     if with_musical_curriculum:
+        # 1. Parallelismo Scienze Motorie sulle classi Terze (es. 3A con 3B, 3C con 3D, 3E con 3F)
         third_grade_classes = [c_id for c_id in class_keys if classes[c_id].grade == 3]
-        pg_list = []
         for i in range(0, len(third_grade_classes), 2):
             pair_c = third_grade_classes[i:i+2]
             if len(pair_c) == 2:
@@ -1013,7 +1015,23 @@ def get_sample_problem(
                     is_same_teacher_merged=same_t,
                     is_active=True
                 ))
-        config.parallel_groups = pg_list
+
+        # 2. Parallelismo 1 ora a settimana per tutte le Prime insieme su Italiano
+        first_grade_classes = [c_id for c_id in class_keys if classes[c_id].grade == 1]
+        if len(first_grade_classes) >= 2:
+            pg_list.append(ParallelGroup(
+                id="pg_ita_1_all",
+                name=f"Italiano Parallelo Prime ({len(first_grade_classes)} Classi: {', '.join(classes[c].name for c in first_grade_classes)})",
+                subject_id="ita",
+                class_ids=first_grade_classes,
+                parallel_hours=1,
+                force_consecutive_block=False,
+                room_id=None,
+                is_same_teacher_merged=True,
+                is_active=True
+            ))
+
+    config.parallel_groups = pg_list
 
     # 6. Alunni DVA (23 Casi: max 2 per classe, 16 a 18h [6 gravi], 7 a 9h)
     students_dva = {}

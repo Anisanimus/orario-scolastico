@@ -726,7 +726,18 @@ class TimetableSolver:
             # VINCOLO RIGIDO PART-TIME: Massimo N Giorni di presenza a scuola
             if teacher.is_part_time and teacher.max_working_days is not None:
                 eff_max_d = max(teacher.max_daily_hours, 1)
-                min_days_needed = (t_total_h + eff_max_d - 1) // eff_max_d if eff_max_d > 0 else 1
+                # Calcola il massimo di ore che il docente può fare in un singolo giorno:
+                # Per ogni classe c_id, la classe può ricevere dal docente al massimo sum(max_daily_hours) delle sue materie
+                max_h_single_day = sum(
+                    sum(getattr(a, "max_daily_hours", 2) or 2 for a in t_assignments if a.class_id == c_id)
+                    for c_id in set(a.class_id for a in t_assignments)
+                )
+                eff_capacity_per_day = max(min(eff_max_d, max_h_single_day), 1)
+                # Minimo giorni teorici per il monte ore totale
+                min_days_by_total = (t_total_h + eff_capacity_per_day - 1) // eff_capacity_per_day if eff_capacity_per_day > 0 else 1
+                # Minimo giorni per singola cattedra (es. 4h di matematica con max 1h al giorno richiedono almeno 4 giorni)
+                min_days_by_assign = max(( (a.hours_per_week + (getattr(a, "max_daily_hours", 1) or 1) - 1) // (getattr(a, "max_daily_hours", 1) or 1) for a in t_assignments), default=1)
+                min_days_needed = max(min_days_by_total, min_days_by_assign)
                 allowed_max_days = max(teacher.max_working_days, min_days_needed)
                 allowed_max_days = min(allowed_max_days, num_days)
                 
@@ -813,12 +824,19 @@ class TimetableSolver:
                 if day_triplets:
                     m.Add(sum(day_triplets) == 1)
             else:
-                is_force_double = a.force_double_hours
-                if hasattr(prob.config, "subject_block_preferences") and prob.config.subject_block_preferences:
+                # La forzatura specifica per cattedra/docente ha la priorità o si somma alla preferenza per materia
+                is_force_double = bool(a.force_double_hours)
+                if not is_force_double and hasattr(prob.config, "subject_block_preferences") and prob.config.subject_block_preferences:
                     if a.subject_id in prob.config.subject_block_preferences:
                         is_force_double = bool(prob.config.subject_block_preferences[a.subject_id])
 
                 if is_force_double and a.hours_per_week >= 2:
+                    # Controlla se la cattedra è coinvolta in un parallelismo da 1 ora singola (es. 1h parallelo prime)
+                    in_1h_parallel = any(
+                        grp.is_active and a.class_id in grp.class_ids and a.subject_id == grp.subject_id and grp.parallel_hours == 1 and not grp.force_consecutive_block
+                        for grp in active_parallel_groups
+                    )
+
                     day_pairs = []
                     is_dada_strict_pairs = getattr(prob.config, "is_dada", False) and getattr(prob.config, "dada_strict_even_pairs", False)
                     a_pairs = []
@@ -836,9 +854,16 @@ class TimetableSolver:
                         m.Add(sum(self.x[a.id, d, h] for h in range(H)) <= 2)
 
                     if a_pairs:
-                        target_pairs = a.hours_per_week // 2
-                        # Vincolo rigido matematico: 100% dei blocchi da 2 ore garantiti accoppiati
-                        m.Add(sum(a_pairs) == target_pairs)
+                        if in_1h_parallel:
+                            # Con 1h parallela singola (es. 6h totali = 2 blocchi da 2h + 2 ore singole oppure 2 blocchi + 1h parallela):
+                            # Il numero di blocchi da 2h può essere pari a (hours_per_week - 1)//2 oppure hours_per_week // 2
+                            min_pairs = (a.hours_per_week - 1) // 2
+                            m.Add(sum(a_pairs) >= min_pairs)
+                            m.Add(sum(a_pairs) <= a.hours_per_week // 2)
+                        else:
+                            target_pairs = a.hours_per_week // 2
+                            # Vincolo rigido matematico: 100% dei blocchi da 2 ore garantiti accoppiati
+                            m.Add(sum(a_pairs) == target_pairs)
 
         # E-bis. MINIMIZZAZIONE USO SPAZI SECONDARI / EMERGENZA (Priorità Aule & Palestre)
         # Se un gruppo di aule contiene spazi a priorità differenziata (es. Palestra Principale Priorità 1 vs Emergenza Priorità 2),

@@ -56,20 +56,24 @@ class TestMusicalCurriculumAndAfternoonSuite(unittest.TestCase):
             self.assertTrue("A-56" in t.cdc, f"Il docente {t.name} deve avere CdC A-56, trovato: {t.cdc}")
 
     def test_03_single_gym_and_third_grade_parallelism(self):
-        """Verifica che ci sia 1 sola palestra e 3 gruppi di parallelismo per le classi terze."""
+        """Verifica che ci sia 1 sola palestra, 3 gruppi di parallelismo terze mot e 1 parallelismo prime ita."""
         gym_rooms = [r for r in self.problem.rooms.values() if "mot" in r.subject_ids]
         self.assertEqual(len(gym_rooms), 1, f"Deve esserci esattamente 1 palestra, trovate: {len(gym_rooms)}")
         gym = gym_rooms[0]
         self.assertEqual(gym.id, "bebe_vio")
         self.assertGreaterEqual(gym.capacity, 2, "La palestra unica deve poter accogliere 2 classi in parallelo")
 
-        pg_list = self.problem.config.parallel_groups
-        self.assertEqual(len(pg_list), 3, "Devono esserci 3 gruppi di parallelismo per le classi terze (3A+3B, 3C+3D, 3E+3F)")
-        for pg in pg_list:
-            self.assertEqual(pg.subject_id, "mot")
+        mot_pgs = [pg for pg in self.problem.config.parallel_groups if pg.subject_id == "mot"]
+        self.assertEqual(len(mot_pgs), 3, "Devono esserci 3 gruppi di parallelismo motoria per le terze (3A+3B, 3C+3D, 3E+3F)")
+        for pg in mot_pgs:
             self.assertEqual(pg.parallel_hours, 2)
             self.assertEqual(len(pg.class_ids), 2)
             self.assertTrue(pg.force_consecutive_block)
+
+        ita_prime_pgs = [pg for pg in self.problem.config.parallel_groups if pg.subject_id == "ita"]
+        self.assertEqual(len(ita_prime_pgs), 1, "Deve esserci 1 parallelismo per tutte le prime su Italiano")
+        self.assertEqual(len(ita_prime_pgs[0].class_ids), 6)
+        self.assertEqual(ita_prime_pgs[0].parallel_hours, 1)
 
     def test_04_solver_feasibility_and_co_teaching(self):
         """Esegue il solutore CP-SAT e verifica compresenze a 4 docenti e parallelismi in palestra."""
@@ -79,7 +83,8 @@ class TestMusicalCurriculumAndAfternoonSuite(unittest.TestCase):
         self.assertIn(result.status, ["OPTIMAL", "FEASIBLE"], f"Il solutore deve produrre una soluzione valida. Ricevuto: {result.status}")
 
         # 1. Verifica che tutte le classi terze in parallelismo abbiano gli stessi slot di Motoria
-        for pg in self.problem.config.parallel_groups:
+        mot_pgs = [pg for pg in self.problem.config.parallel_groups if pg.subject_id == "mot"]
+        for pg in mot_pgs:
             c1, c2 = pg.class_ids
             g1 = result.grid_by_class[c1]
             g2 = result.grid_by_class[c2]
@@ -92,6 +97,18 @@ class TestMusicalCurriculumAndAfternoonSuite(unittest.TestCase):
             d2, h2 = slots1[1]
             self.assertEqual(d1, d2, "Le 2 ore di motoria devono essere nello stesso giorno")
             self.assertEqual(abs(h1 - h2), 1, "Le 2 ore di motoria devono essere consecutive")
+
+        # 1-bis. Verifica parallelismo 1h tutte le prime su Italiano
+        prime = ["1A", "1B", "1C", "1D", "1E", "1F"]
+        slots_by_dh = {}
+        for cid in prime:
+            g = result.grid_by_class[cid]
+            for d in range(len(g)):
+                for h in range(len(g[d])):
+                    if g[d][h] and g[d][h].subject_id == "ita":
+                        slots_by_dh.setdefault((d, h), []).append(cid)
+        sync_slots = [dh for dh, clist in slots_by_dh.items() if len(clist) == 6]
+        self.assertGreaterEqual(len(sync_slots), 1, f"Tutte le 6 prime devono avere almeno 1 ora sincronizzata di Italiano, trovati slot: {sync_slots}")
 
         # 2. Verifica che i 4 docenti di strumento siano compresenti negli slot di orchestra
         mus_assigns = [a for a in self.problem.assignments if a.subject_id in ["orch", "solf"]]
