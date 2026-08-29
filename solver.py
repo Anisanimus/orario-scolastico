@@ -587,9 +587,12 @@ class TimetableSolver:
                 day_act = m.NewBoolVar(f"t_day_active_{t_id}_d{d}")
                 self.t_day_active[t_id, d] = day_act
                 if t_total_h > 0:
-                    # Regola 1: Minimo 2 ore al giorno (se presente)
-                    if eff_min_daily > 0:
+                    # Regola 1: Minimo 2 ore al giorno (se presente, tranne per docenti di strumento con cattedre parziali o slot fissati)
+                    is_instrument_or_special = any(a.subject_id in ["orch", "solf"] for a in t_assignments) or (t_total_h < 10)
+                    if eff_min_daily > 0 and not is_instrument_or_special:
                         m.Add(sum(daily_active_terms) >= eff_min_daily * day_act)
+                    else:
+                        m.Add(sum(daily_active_terms) >= 1 * day_act)
 
                     # Regola 2: Massimo ore al giorno (default 5 ore)
                     m.Add(sum(daily_active_terms) <= max_daily * day_act)

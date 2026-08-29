@@ -2812,30 +2812,37 @@ with tabs[0]:
 
                     st.markdown("---")
                     st.markdown("##### 📌 Fissaggio Esatto Slot Orari Compresenza (Orchestra & Solfeggio):")
-                    st.caption("Fissa con precisione in quale **Giorno e Ora** (es. *Lunedì 2ª ora, Mercoledì 3ª ora*) le classi svolgono le ore di compresenza con tutti e 4 i docenti di strumento:")
+                    # Mappa di default realistica senza conflitti docente (Lunedì e Mercoledì mattino)
+                    default_pin_schedule = {
+                        1: {"d1": 0, "h1": 1, "d2": 2, "h2": 3}, # 1F: Lun 2ª ora, Mer 4ª ora
+                        2: {"d1": 0, "h1": 2, "d2": 2, "h2": 1}, # 2F: Lun 3ª ora, Mer 2ª ora
+                        3: {"d1": 0, "h1": 3, "d2": 2, "h2": 2}, # 3F: Lun 4ª ora, Mer 3ª ora
+                    }
                     
                     for mus_c in mus_classes_list:
                         c_orch_assign = next((a for a in problem.assignments if a.class_id == mus_c.id and a.subject_id in ["orch", "solf"]), None)
                         if c_orch_assign:
                             cur_pins = getattr(c_orch_assign, "pinned_slots", []) or []
                             c_p_title, c_p_d1, c_p_h1, c_p_d2, c_p_h2 = st.columns([1.5, 1.3, 1.1, 1.3, 1.1])
+                            def_sch = default_pin_schedule.get(mus_c.grade, {"d1": 0, "h1": 1, "d2": 2, "h2": 2})
+                            
                             with c_p_title:
                                 st.markdown(f"🎼 **Compresenza {mus_c.name}** *(2h)*")
                             with c_p_d1:
-                                p1_d = cur_pins[0][0] if len(cur_pins) > 0 and cur_pins[0][0] < problem.config.num_days else 0
+                                p1_d = cur_pins[0][0] if len(cur_pins) > 0 and cur_pins[0][0] < problem.config.num_days else def_sch["d1"]
                                 sel_d1 = st.selectbox(f"1ªh Giorno {mus_c.name}", DAYS_OF_WEEK[:problem.config.num_days], index=p1_d, key=f"pin_mus_d1_{mus_c.id}", label_visibility="collapsed")
                                 idx_d1 = DAYS_OF_WEEK.index(sel_d1)
                             with c_p_h1:
                                 max_h1 = get_safe_daily_hours(problem, idx_d1)
-                                p1_h = min(cur_pins[0][1], max_h1 - 1) if len(cur_pins) > 0 else 1
+                                p1_h = min(cur_pins[0][1], max_h1 - 1) if len(cur_pins) > 0 else min(def_sch["h1"], max_h1 - 1)
                                 sel_h1 = st.selectbox(f"1ªh Ora {mus_c.name}", list(range(max_h1)), index=p1_h, format_func=lambda x: f"{x+1}ª ora", key=f"pin_mus_h1_{mus_c.id}", label_visibility="collapsed")
                             with c_p_d2:
-                                p2_d = cur_pins[1][0] if len(cur_pins) > 1 and cur_pins[1][0] < problem.config.num_days else 2
+                                p2_d = cur_pins[1][0] if len(cur_pins) > 1 and cur_pins[1][0] < problem.config.num_days else def_sch["d2"]
                                 sel_d2 = st.selectbox(f"2ªh Giorno {mus_c.name}", DAYS_OF_WEEK[:problem.config.num_days], index=p2_d, key=f"pin_mus_d2_{mus_c.id}", label_visibility="collapsed")
                                 idx_d2 = DAYS_OF_WEEK.index(sel_d2)
                             with c_p_h2:
                                 max_h2 = get_safe_daily_hours(problem, idx_d2)
-                                p2_h = min(cur_pins[1][1], max_h2 - 1) if len(cur_pins) > 1 else 2
+                                p2_h = min(cur_pins[1][1], max_h2 - 1) if len(cur_pins) > 1 else min(def_sch["h2"], max_h2 - 1)
                                 sel_h2 = st.selectbox(f"2ªh Ora {mus_c.name}", list(range(max_h2)), index=p2_h, format_func=lambda x: f"{x+1}ª ora", key=f"pin_mus_h2_{mus_c.id}", label_visibility="collapsed")
                             
                             # Salva i pin su questa cattedra di orchestra

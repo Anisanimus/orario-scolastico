@@ -123,7 +123,7 @@ def get_sample_problem(
         default_lunch_break_duration=60,
         subject_block_preferences={
             "art": True, "tec": True, "mot": True, "mus": True, "spa": True, "ita": True, "mat": True,
-            "orch": True, "solf": True, "ing": False, "sci": False, "sto": False, "geo": False, "rel": False, "tea": False
+            "orch": False, "solf": False, "ing": False, "sci": False, "sto": False, "geo": False, "rel": False, "tea": False
         }
     )
     if with_theater:
