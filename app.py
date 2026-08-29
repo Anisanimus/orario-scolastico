@@ -1852,20 +1852,22 @@ def render_room_bottlenecks_resolver(problem: TimetableProblem, key_suffix: str 
 # =============================================================
 # GESTIONE SIDEBAR & SCENARI
 # =============================================================
-problem = st.session_state.problem
-
 def compute_active_scenario(prob: TimetableProblem) -> str:
     if not prob.teachers and not prob.classes:
         return "empty"
-    has_theater = (
-        getattr(prob.config, "approfondimento_type", "") == "custom_activity"
-        or getattr(prob.config, "approfondimento_subject", "") == "tea"
-        or "tea" in prob.subjects
-        or "teatro" in prob.rooms
-    )
+    if bool(getattr(prob.config, "has_musical_curriculum", False)) or any(getattr(c, "curriculum_type", "") == "musicale" for c in prob.classes.values()):
+        return "musical"
+    if any(getattr(c, "curriculum_type", "") == "prolungato" for c in prob.classes.values()):
+        return "prolungato"
     if getattr(prob.config, "num_days", 5) == 6:
         return "standard_6d"
     if prob.config.is_dada:
+        has_theater = (
+            getattr(prob.config, "approfondimento_type", "") == "custom_activity"
+            or getattr(prob.config, "approfondimento_subject", "") == "tea"
+            or any(a.subject_id == "tea" for a in prob.assignments)
+            or "teatro" in prob.rooms
+        )
         return "dada_theater" if has_theater else "dada"
     return "standard"
 
@@ -1919,7 +1921,7 @@ with st.sidebar:
         st.session_state.result = None
         st.rerun()
 
-    is_mus_act = bool(getattr(problem.config, "has_musical_curriculum", False))
+    is_mus_act = (active_scen == "musical")
     if st.button(f"{'✅ ' if is_mus_act else ''}🎼 Tempo Musicale (32h - Corso F)", type="primary" if is_mus_act else "secondary", use_container_width=True, help="Carica scenario Tradizionale (NO DADA) con Indirizzo Musicale (Corso F a 32h con Orchestra/Solfeggio e 4 docenti di strumento in compresenza)"):
         st.session_state.clear()
         st.session_state.problem = get_sample_problem(num_classes=18, is_dada=False, with_theater=False, num_days=5, with_musical_curriculum=True, with_extended_curriculum=False)
@@ -1927,7 +1929,7 @@ with st.sidebar:
         st.session_state.result = None
         st.rerun()
 
-    is_ext_act = any(getattr(c, "curriculum_type", "") == "prolungato" for c in problem.classes.values())
+    is_ext_act = (active_scen == "prolungato")
     if st.button(f"{'✅ ' if is_ext_act else ''}🕒 Tempo Prolungato (36h - Corso E)", type="primary" if is_ext_act else "secondary", use_container_width=True, help="Carica scenario Tradizionale (NO DADA) con Tempo Prolungato (Corso E a 36h con rientri pomeridiani e compresenze)"):
         st.session_state.clear()
         st.session_state.problem = get_sample_problem(num_classes=18, is_dada=False, with_theater=False, num_days=5, with_musical_curriculum=False, with_extended_curriculum=True)
