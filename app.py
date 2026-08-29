@@ -2817,11 +2817,12 @@ with tabs[0]:
                             mus_c.afternoon_days = chosen_aft
                         with c_col_m:
                             cur_l = getattr(mus_c, "lunch_break_duration", 60)
+                            c_lunch_opts = [0, 30, 60, 90]
                             chosen_c_lunch = st.selectbox(
                                 f"Mensa {mus_c.name}",
-                                options=[30, 60, 90],
-                                index=[30, 60, 90].index(cur_l) if cur_l in [30, 60, 90] else 1,
-                                format_func=lambda m: f"🍝 {m} min",
+                                options=c_lunch_opts,
+                                index=c_lunch_opts.index(cur_l) if cur_l in c_lunch_opts else 2,
+                                format_func=lambda m: "🚫 No Mensa (7ªh lez.)" if m == 0 else f"🍝 {m} min",
                                 key=f"mus_class_lunch_sel_{mus_c.id}",
                                 label_visibility="collapsed"
                             )
@@ -2871,17 +2872,17 @@ with tabs[0]:
     with col_mus2:
         with st.container(border=True):
             st.markdown("##### 🍝 Pausa Mensa Generale & Impostazioni")
-            lunch_opts = [30, 60, 90]
+            lunch_opts = [0, 30, 60, 90]
             cur_lunch = getattr(problem.config, "default_lunch_break_duration", 60)
-            l_idx = lunch_opts.index(cur_lunch) if cur_lunch in lunch_opts else 1
+            l_idx = lunch_opts.index(cur_lunch) if cur_lunch in lunch_opts else 2
             chosen_lunch = st.selectbox(
                 "Durata Pausa Mensa Predefinita di Istituto:",
                 options=lunch_opts,
                 index=l_idx,
-                format_func=lambda m: f"🍝 {m} minuti ({'mezz\'ora' if m==30 else ('1 ora' if m==60 else '1 ora e mezza')})"
+                format_func=lambda m: "🚫 Nessuna Mensa (Lezione continua alla 7ª Ora)" if m == 0 else f"🍝 {m} minuti ({'mezz\'ora' if m==30 else ('1 ora' if m==60 else '1 ora e mezza')})"
             )
             problem.config.default_lunch_break_duration = chosen_lunch
-            st.caption("La pausa mensa separa l'orario antimeridiano (lezioni mattutine) dai rientri pomeridiani (Orchestra, Solfeggio o altre discipline).")
+            st.caption("Selezionando 'Nessuna Mensa', la 7ª ora è una normale ora di lezione consecutiva senza interruzione.")
 
             st.divider()
             st.markdown("##### 🕒 Tempo Prolungato (36 Ore)")
