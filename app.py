@@ -2252,11 +2252,11 @@ Il solutore rispetta automaticamente 4 regole categoriche per tutti i docenti:
     st.caption(f"📌 **Orario Scolastico Facile** · Release `{APP_VERSION}` · [GitHub](https://github.com/Anisanimus/orario-scolastico)")
 
 tabs = st.tabs([
-    "⚙️ 1. Struttura",
+    "⚙️ 1. Struttura & Indirizzi",
     "👥 2. Docenti & Cattedre",
-    "🏫 3. Classi & Aule",
+    "🏫 3. Classi, Materie & Spazi",
     "🤝 4. Sostegno & DVA",
-    "📊 5. Quadratura",
+    "📊 5. Quadratura Cattedre",
     "🚀 6. Genera Orario",
     "📅 7. Visualizza & Esporta"
 ])
