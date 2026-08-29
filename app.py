@@ -118,6 +118,34 @@ def create_safe_teacher(
 
 from schedule_renderer import render_html_schedule_table
 
+def get_teacher_subjects_display(t: Teacher, problem: TimetableProblem) -> str:
+    t_assigns = [a for a in problem.assignments if a.teacher_id == t.id or t.id in getattr(a, "co_teacher_ids", [])]
+    s_ids = list(dict.fromkeys(a.subject_id for a in t_assigns))
+    if s_ids:
+        names = [problem.subjects[s].name for s in s_ids if s in problem.subjects]
+        if names:
+            return ", ".join(names)
+    cdc_val = getattr(t, "cdc", "")
+    mapping = {
+        "A-22": "Italiano, Storia, Geografia",
+        "A-28": "Matematica e Scienze",
+        "A-24": "Inglese / Spagnolo",
+        "A-60": "Tecnologia",
+        "A-30": "Musica",
+        "A-56": "Strumento Musicale",
+        "A-01": "Arte e Immagine",
+        "A-48": "Scienze Motorie",
+        "Religione": "Religione Cattolica",
+        "ADMM": "Sostegno",
+        "Sostegno": "Sostegno"
+    }
+    for k, v in mapping.items():
+        if k in cdc_val:
+            return v
+    if "sostegno" in t.name.lower() or "sostegno" in cdc_val.lower() or "admm" in cdc_val.lower():
+        return "Sostegno"
+    return "Docente"
+
 def render_subject_coupling_panel(problem: TimetableProblem, key_prefix: str = "main"):
     """Pannello interattivo per scegliere quali materie accoppiare forzatamente a blocchi da 2 ore e quali no."""
     st.markdown("#### 🔗 Scelta Accoppiamento Forzato Materie (Blocchi da 2 Ore Consecutive)")
@@ -308,7 +336,7 @@ def render_subject_coupling_panel(problem: TimetableProblem, key_prefix: str = "
         sel_t_id = st.selectbox(
             "Seleziona Docente per gestire i Blocchi da 2 Ore:",
             options=t_options,
-            format_func=lambda tid: f"👤 {problem.teachers[tid].name} ({getattr(problem.teachers[tid], 'cdc', '') or 'Docente'})",
+            format_func=lambda tid: f"👤 {problem.teachers[tid].name} ({get_teacher_subjects_display(problem.teachers[tid], problem)})",
             key=f"{key_prefix}_sel_teacher_coupling"
         )
         
@@ -3110,7 +3138,7 @@ with tabs[1]:
                 "Docenti selezionati per l'eliminazione:",
                 options=list(problem.teachers.keys()),
                 default=cur_batch_sel,
-                format_func=lambda x: f"{problem.teachers[x].name} [{getattr(problem.teachers[x], 'cdc', '')}] ({sum(a.hours_per_week for a in problem.assignments if a.teacher_id == x)}h)",
+                format_func=lambda x: f"{problem.teachers[x].name} ({get_teacher_subjects_display(problem.teachers[x], problem)}) - {sum(a.hours_per_week for a in problem.assignments if a.teacher_id == x)}h",
                 key="tab2_batch_doc_sel_widget"
             )
             st.session_state["tab2_batch_doc_sel"] = chosen_batch_docs
