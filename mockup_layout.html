@@ -221,8 +221,8 @@
       <p style="color: var(--text-muted); font-size: 13px;">Tutte le opzioni incluse (DADA, Musicale, Prolungato, Approfondimento 1h PTOF) con switch nell'header.</p>
     </div>
     <div style="display:flex; gap:8px;">
-      <button class="btn btn-secondary" onclick="alert('Backup scaricato!')">📥 Scarica Excel Master</button>
-      <button class="btn btn-secondary" onclick="alert('Dataset demo caricato!')">⚡ Carica Demo</button>
+      <button class="btn btn-secondary" onclick="alert('Backup completo scaricato con successo!')">📥 Scarica Excel Master</button>
+      <button class="btn btn-secondary" onclick="loadScenarioDemo('standard')">⚡ Carica Demo</button>
     </div>
   </div>
 
@@ -632,7 +632,7 @@
 
       <div class="card" style="text-align:center;">
         <h2 style="font-size:18px; font-weight:700; margin-bottom:8px;">🚀 Generazione Orario con CP-SAT</h2>
-        <button class="btn btn-primary" style="font-size:15px; padding:12px 24px; width:100%; justify-content:center;" onclick="alert('Risolutore CP-SAT avviato!')">⚡ GENERA ORARIO SCOLASTICO</button>
+        <button id="btn-start-solver" class="btn btn-primary" style="font-size:15px; padding:12px 24px; width:100%; justify-content:center;" onclick="startCPSATSolver()">⚡ GENERA ORARIO SCOLASTICO</button>
       </div>
     </div>
     <div class="step-nav">
@@ -653,8 +653,10 @@
       if (stepEl) stepEl.classList.remove('active');
       if (btnEl) btnEl.classList.remove('active');
     }
-    document.getElementById('step-' + stepNum).classList.add('active');
-    document.getElementById('step-btn-' + stepNum).classList.add('active');
+    const targetStep = document.getElementById('step-' + stepNum);
+    const targetBtn = document.getElementById('step-btn-' + stepNum);
+    if (targetStep) targetStep.classList.add('active');
+    if (targetBtn) targetBtn.classList.add('active');
   }
 
   function toggleAccordionBox(boxId, isChecked) {
@@ -689,11 +691,11 @@
     const panelSubj = document.getElementById('panel-app-subject');
     const panelCust = document.getElementById('panel-app-custom');
     if (val === 'subject') {
-      panelSubj.style.display = 'block';
-      panelCust.style.display = 'none';
+      if (panelSubj) panelSubj.style.display = 'block';
+      if (panelCust) panelCust.style.display = 'none';
     } else {
-      panelSubj.style.display = 'none';
-      panelCust.style.display = 'block';
+      if (panelSubj) panelSubj.style.display = 'none';
+      if (panelCust) panelCust.style.display = 'block';
     }
   }
 
@@ -709,8 +711,11 @@
     const satCol = document.getElementById('sat-hour-col');
     if (satCol) {
       satCol.style.opacity = is6Days ? '1' : '0.3';
-      satCol.querySelector('input').disabled = !is6Days;
-      if (is6Days && satCol.querySelector('input').value == '0') satCol.querySelector('input').value = '5';
+      const inputEl = satCol.querySelector('input');
+      if (inputEl) {
+        inputEl.disabled = !is6Days;
+        if (is6Days && inputEl.value == '0') inputEl.value = '5';
+      }
     }
 
     const thGiorno = document.getElementById('th-giorno-libero');
@@ -720,7 +725,60 @@
     tdGiorni.forEach(el => el.style.display = is6Days ? '' : 'none');
   }
 
+  // API Backend Connectors
+  async function loadScenarioDemo(scen) {
+    try {
+      const res = await fetch('/api/load_demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario: scen })
+      });
+      const data = await res.json();
+      alert('✅ ' + data.message);
+      refreshState();
+    } catch (e) {
+      alert('Errore caricamento scenario: ' + e);
+    }
+  }
+
+  async function startCPSATSolver() {
+    const btn = document.getElementById('btn-start-solver');
+    if (btn) {
+      btn.innerText = '⏳ Calcolo Ottimizzazione CP-SAT in corso...';
+      btn.disabled = true;
+    }
+    try {
+      const res = await fetch('/api/solve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ max_time: 25 })
+      });
+      const data = await res.json();
+      if (data.status === 'ok') {
+        alert('🎉 Orario Calcolato con Successo! Stato: ' + data.solver_status + ' (Ore buche residue: ' + data.total_gap_hours + 'h)');
+      } else {
+        alert('❌ Errore calcolo orario: ' + data.message);
+      }
+    } catch (e) {
+      alert('Errore di connessione: ' + e);
+    } finally {
+      if (btn) {
+        btn.innerText = '⚡ GENERA ORARIO SCOLASTICO';
+        btn.disabled = false;
+      }
+    }
+  }
+
+  async function refreshState() {
+    try {
+      const res = await fetch('/api/state');
+      const data = await res.json();
+      console.log('App state synced:', data);
+    } catch(e) {}
+  }
+
   updateSpaziTitle();
+  refreshState();
 </script>
 
 </body>
