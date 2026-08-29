@@ -2872,6 +2872,8 @@ with tabs[1]:
                     pt_details.append(f"max {max_w_days} gg")
                 contratto_label = f"⏱️ **Part-Time** ({', '.join(pt_details)})"
             else:
+                contratto_label = "💼 Tempo Pieno (18h)"
+
             f_list = []
             if getattr(t, "free_day_1", None): f_list.append(t.free_day_1)
             if getattr(t, "free_day_2", None): f_list.append(t.free_day_2)
@@ -2918,8 +2920,10 @@ with tabs[1]:
                 has_co = any(tid in getattr(a, "co_teacher_ids", []) for a in t_assigns)
                 co_tag = " *(in compresenza)*" if (has_co and not any(a.teacher_id == tid for a in t_assigns)) else ""
                 classes_txt = f"📚 *Classi: {', '.join(assigned_classes_names)} ({tot_h_assigned}h{co_tag})*" if assigned_classes_names else "📚 *Nessuna classe assegnata*"
+
             t_subjs_str = get_teacher_subjects_display(t, problem)
             pt_badge = " ⏱️ `[PART-TIME]`" if is_pt else ""
+            is_curr_editing = (st.session_state.editing_teacher_id == tid)
     
             if is_settimana_corta:
                 row_cols = st.columns([3, 2, 3, 1, 1])
