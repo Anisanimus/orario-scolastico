@@ -2782,14 +2782,14 @@ with tabs[0]:
                                 force_double_hours=False,
                                 max_daily_hours=1,
                                 co_teacher_ids=co_teachers_ids,
-                                preferred_time_of_day="morning_only",
+                                preferred_time_of_day="any",
                                 preferred_room_id="auditorium" if "auditorium" in problem.rooms else None
                             ))
                         else:
                             for oa in c_orch_assigns:
                                 oa.hours_per_week = 2
                                 oa.co_teacher_ids = co_teachers_ids
-                                oa.preferred_time_of_day = "morning_only"
+                                oa.preferred_time_of_day = "any"
                     elif getattr(c_obj, "curriculum_type", "ordinario") == "musicale" and c_obj.section != chosen_mus_sec:
                         c_obj.curriculum_type = "ordinario"
                         c_obj.weekly_hours_target = 30

@@ -703,7 +703,7 @@ def get_sample_problem(
                     force_double_hours=False, # Distribuite su Lunedì e Mercoledì al mattino
                     max_daily_hours=1,
                     co_teacher_ids=instrument_co_teachers,
-                    preferred_time_of_day="morning_only",
+                    preferred_time_of_day="any",
                     preferred_room_id="auditorium",
                     pinned_slots=class_slots_preset.get(c_mus, [[0, 1], [2, 3]])
                 ))

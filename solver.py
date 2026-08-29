@@ -332,6 +332,16 @@ class TimetableSolver:
                 # Se non specificato, aggiungi all'inizio settimana
                 for idx_d in range(min(diff_h, self.num_days)):
                     c_dh[idx_d] += 1
+
+            # Espandi se ci sono slot fissati (pinned_slots) che richiedono ore successive (es. 7ª, 8ª o 9ª ora con o senza mensa)
+            for a in problem.assignments:
+                if a.class_id == c_id:
+                    for slot in getattr(a, "pinned_slots", []):
+                        if len(slot) == 2:
+                            p_d, p_h = slot[0], slot[1]
+                            if p_d < self.num_days and p_h >= c_dh[p_d]:
+                                c_dh[p_d] = p_h + 1
+
             self.class_daily_hours[c_id] = c_dh
 
         # Ore massime per giorno della scuola (compresi i pomeriggi)
