@@ -2248,14 +2248,6 @@ Il solutore rispetta automaticamente 4 regole categoriche per tutti i docenti:
 
         if st.button(f"✨ Novità Versione {APP_VERSION}", use_container_width=True):
             show_whats_new_dialog()
-    else:
-        with st.expander(f"✨ Novità Versione {APP_VERSION}", expanded=False):
-            st.markdown("""
-- **✏️ Ritocchi Manuali & Smart Swap**: Spostamento manuale e riparazione automatica CP-SAT a catena minima.
-- **📥 Importazione Orario Excel**: Caricamento con validatore deterministico di conflitti ed errori.
-- **♿ Sostegno & Compresenze**: Priorità di copertura PEI e barra di avanzamento del calcolo.
-- **🔒 Organico Certificato**: Nomi di fantasia realistici a tutela della privacy.
-            """)
 
     st.caption(f"📌 **Orario Scolastico Facile** · Release `{APP_VERSION}` · [GitHub](https://github.com/Anisanimus/orario-scolastico)")
 
@@ -2270,10 +2262,10 @@ tabs = st.tabs([
 ])
 
 # =============================================================
-# TAB 1: CONFIGURAZIONE STRUTTURA SCOLASTICA E LEZIONI
+# TAB 1: CONFIGURAZIONE STRUTTURA SCOLASTICA E INDIRIZZI
 # =============================================================
 with tabs[0]:
-    st.header("⚙️ Configurazione Struttura Scolastica e Lezioni")
+    st.header("⚙️ Configurazione Struttura Scolastica & Indirizzi")
     
     with st.expander("📁 Gestione Dati Completa Scuola & Backup Master (.xlsx)", expanded=False):
         st.write("Scarica o ricarica l'intera banca dati della scuola (**Struttura, Docenti, Classi, Aule DADA, Cattedre, Sostegno, Parallelismi**) in un **unico file Excel multi-foglio**:")
@@ -2327,20 +2319,13 @@ with tabs[0]:
                     st.info(log_msg)
 
     v = st.session_state.get("data_version", 0)
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3 = st.columns([2, 1.2, 1])
     with col1:
         problem.config.school_name = st.text_input(
             "Nome Istituto Comprensivo / Scuola Media",
             value=problem.config.school_name,
             key=f"school_name_txt_{v}"
         )
-        problem.config.school_type = st.selectbox(
-            "Tipologia Scuola",
-            ["Secondaria I Grado (Scuola Media)", "Istituto Comprensivo (Sezione Medie)"],
-            index=0 if "Istituto Comprensivo" not in problem.config.school_type else 1,
-            key=f"school_type_sel_{v}"
-        )
-    
     with col2:
         def on_num_days_changed():
             new_days = st.session_state.get(f"sel_num_days_radio_{v}", problem.config.num_days)
@@ -2348,12 +2333,10 @@ with tabs[0]:
                 problem.config.num_days = new_days
                 if new_days == 6:
                     problem.config.daily_hours = [5, 5, 5, 5, 5, 5]
-                    for i in range(6):
-                        st.session_state[f"dh_{i}"] = 5
+                    for i in range(6): st.session_state[f"dh_{i}"] = 5
                 else:
                     problem.config.daily_hours = [6, 6, 6, 6, 6]
-                    for i in range(5):
-                        st.session_state[f"dh_{i}"] = 6
+                    for i in range(5): st.session_state[f"dh_{i}"] = 6
                 st.session_state["result"] = None
 
         num_days = st.radio(
@@ -2362,7 +2345,7 @@ with tabs[0]:
             index=0 if problem.config.num_days == 5 else 1,
             key=f"sel_num_days_radio_{v}",
             on_change=on_num_days_changed,
-            format_func=lambda x: f"{x} Giorni (Settimana {'Corta Lun-Ven: 6h/dì' if x==5 else 'Lunga Lun-Sab: 5h/dì'})",
+            format_func=lambda x: f"{x} Giorni ({'Settimana Corta Lun-Ven: 6h/dì' if x==5 else 'Settimana Lunga Lun-Sab: 5h/dì'})",
             horizontal=True
         )
         problem.config.num_days = num_days
@@ -2377,91 +2360,65 @@ with tabs[0]:
             step=1,
             help="Numero di classi della scuola (es. 18 classi = 6 sezioni A..F da 1ª a 3ª media)."
         )
-        if len(problem.classes) == 0:
-            if st.button("➕ Crea Struttura Classi (1A, 2A...)", type="primary", use_container_width=True, help=f"Genera automaticamente {target_num_classes} classi distribuite sulle sezioni A, B, C..."):
-                sections = "ABCDEFGHILMNOPQRST"
-                classes_created = {}
-                cl_idx = 0
-                sec_idx = 0
-                while cl_idx < target_num_classes:
-                    sec_letter = sections[sec_idx % len(sections)]
-                    for grade in [1, 2, 3]:
-                        if cl_idx >= target_num_classes:
-                            break
-                        cid = f"{grade}{sec_letter.lower()}"
-                        cname = f"{grade}{sec_letter}"
-                        classes_created[cid] = SchoolClass(
-                            id=cid,
-                            name=cname,
-                            grade=grade,
-                            section=sec_letter
-                        )
-                        cl_idx += 1
-                    sec_idx += 1
-                problem.classes = classes_created
-                st.session_state.result = None
-                st.success(f"✅ Generate {len(classes_created)} classi!")
-                st.rerun()
-        else:
-            st.caption(f"🏫 Classi nel database: **{len(problem.classes)}**")
-            if target_num_classes != len(problem.classes):
-                if st.button(f"🔄 Rigenera a {target_num_classes} Classi", use_container_width=True, help="Rigenera l'elenco classi con il nuovo numero specificato"):
-                    sections = "ABCDEFGHILMNOPQRST"
-                    classes_created = {}
-                    cl_idx = 0
-                    sec_idx = 0
-                    while cl_idx < target_num_classes:
-                        sec_letter = sections[sec_idx % len(sections)]
-                        for grade in [1, 2, 3]:
-                            if cl_idx >= target_num_classes:
-                                break
-                            cid = f"{grade}{sec_letter.lower()}"
-                            cname = f"{grade}{sec_letter}"
-                            classes_created[cid] = SchoolClass(
-                                id=cid,
-                                name=cname,
-                                grade=grade,
-                                section=sec_letter
-                            )
-                            cl_idx += 1
-                        sec_idx += 1
-                    problem.classes = classes_created
-                    # Rimuovi eventuali cattedre assegnate a classi inesistenti
-                    problem.assignments = [a for a in problem.assignments if a.class_id in problem.classes]
-                    st.session_state.result = None
-                    st.success(f"✅ Struttura aggiornata a {len(classes_created)} classi!")
-                    st.rerun()
 
-    # SWITCH MODELLO DADA
-    st.divider()
-    st.subheader("🏫 Modello Didattico DADA (Ambienti di Apprendimento)")
-    st.caption("Nel modello DADA le aule sono assegnate alle materie/dipartimenti e gli studenti ruotano tra i laboratori. *(Nota: per caricare interi scenari demo o resettare il database usa il menu a sinistra nella barra laterale)*.")
+    # -------------------------------------------------------------
+    # 1. SCANSIONE ORARIA ANTIMERIDIANA BASE (30h)
+    # -------------------------------------------------------------
+    with st.container(border=True):
+        st.markdown("##### 📅 Scansione Oraria Settimanale Base (Tempo Normale - 30h)")
+        cols_days = st.columns(num_days)
+        new_daily_hours = list(problem.config.daily_hours[:num_days])
+        while len(new_daily_hours) < num_days:
+            new_daily_hours.append(5 if num_days == 6 else 6)
 
-    dada_toggle_key = "dada_model_active_toggle"
-    if dada_toggle_key not in st.session_state:
-        st.session_state[dada_toggle_key] = bool(problem.config.is_dada)
+        updated_hours = []
+        has_changed = False
+        for d_i in range(num_days):
+            with cols_days[d_i]:
+                val = st.number_input(
+                    label=f"**{DAYS_OF_WEEK[d_i]}**",
+                    min_value=1,
+                    max_value=9,
+                    value=int(new_daily_hours[d_i]),
+                    step=1,
+                    key=f"dh_num_input_{d_i}",
+                    help=f"Ore di lezione di {DAYS_OF_WEEK[d_i]}"
+                )
+                updated_hours.append(int(val))
+                if int(val) != new_daily_hours[d_i]:
+                    has_changed = True
 
-    def on_dada_toggle_change():
-        problem.config.is_dada = st.session_state[dada_toggle_key]
-        st.session_state.result = None
+        if has_changed:
+            problem.config.daily_hours = updated_hours
+            st.session_state.result = None
+            st.rerun()
 
-    st.toggle(
-        "Attiva Modello DADA (Aule assegnate alle Discipline / Dipartimenti)",
-        key=dada_toggle_key,
-        on_change=on_dada_toggle_change,
-        help="Nel modello DADA ogni aula è dedicata a una o più materie didattiche e gli studenti si spostano tra le aule."
-    )
+    # -------------------------------------------------------------
+    # 2. ACCORDION 1: MODELLO DADA
+    # -------------------------------------------------------------
+    with st.expander(f"🏫 Modello Didattico DADA (Aule per Disciplina) {'🟢 [ATTIVO]' if getattr(problem.config, 'is_dada', False) else '⚪ [DISATTIVATO]'}", expanded=bool(getattr(problem.config, "is_dada", False))):
+        dada_toggle_key = "dada_model_active_toggle"
+        if dada_toggle_key not in st.session_state:
+            st.session_state[dada_toggle_key] = bool(problem.config.is_dada)
 
-    if problem.config.is_dada:
-        with st.container(border=True):
+        def on_dada_toggle_change():
+            problem.config.is_dada = st.session_state[dada_toggle_key]
+            st.session_state.result = None
+
+        st.toggle(
+            "Attiva Modello DADA (Aule assegnate ai Dipartimenti / Discipline)",
+            key=dada_toggle_key,
+            on_change=on_dada_toggle_change,
+            help="Nel modello DADA ogni aula è dedicata a una materia e gli studenti si spostano tra le aule."
+        )
+
+        if problem.config.is_dada:
             st.markdown("##### 🚶‍♂️ Politica Spostamento Studenti & Allineamento Blocchi DADA")
-            st.caption("Nel modello DADA, allineare i blocchi da 2 ore agli slot pari/dispari (1-2, 3-4, 5-6) limita i cambi aula esclusivamente agli intervalli o ai cambi blocco, riducendo il viavai nei corridoi.")
-            
             dada_strategy = st.radio(
                 "Come desideri posizionare i blocchi da 2 ore nelle aule DADA?",
                 [
-                    "🟢 Tolleranza Flessibile (Consigliato per docenti: blocchi 2h anche a cavallo 2ª-3ª, 4ª-5ª - Riduce al minimo le ore buche)",
-                    "🔒 Blocchi Rigidi Allineati 1-2, 3-4, 5-6 (Massima quiete corridoi: spostamenti studenti solo a fine blocco / ricreazione)"
+                    "🟢 Tolleranza Flessibile (Blocchi 2h liberi - Ottimizza al massimo le ore buche dei docenti)",
+                    "🔒 Blocchi Rigidi Allineati 1-2, 3-4, 5-6 (Cambio aula solo ad intervallo o ricreazione)"
                 ],
                 index=1 if getattr(problem.config, "dada_strict_even_pairs", False) else 0,
                 key="dada_strict_pairs_radio"
@@ -2471,218 +2428,76 @@ with tabs[0]:
                 problem.config.dada_strict_even_pairs = is_strict_pairs
                 st.session_state.result = None
                 st.rerun()
-                
-            if is_strict_pairs:
-                st.warning("⚠️ **Impatto sui Docenti**: I blocchi rigidi 1-2, 3-4, 5-6 vincolano gli incastri orari. Le materie a ore dispari (es. 3h Inglese o 5h Italiano) dovranno collocare l'ora singola in slot specifici, il che può comportare un lieve aumento delle ore buche per alcuni insegnanti.")
-            else:
-                st.success("✅ **Flessibilità Attiva**: Il solutore posiziona i blocchi da 2 ore dove è più comodo per i docenti, ottimizzando buche e giorni liberi.")
 
-    st.divider()
-    tot_weekly_h = sum(problem.config.daily_hours[:num_days])
-    st.subheader("⏱️ Ore di Lezione Giornaliere di Base (Tempo Normale - 30h)")
-    st.caption(f"Imposta le ore di lezione antimeridiane base per il **Tempo Normale** (totale: **{tot_weekly_h}h/settimana**). *(Nota: per il **Tempo Musicale a 32h** e il **Tempo Prolungato a 36h**, il sistema aggiunge automaticamente nei giorni di rientro la **Pausa Mensa** e le **2 ore pomeridiane**, strutturando la giornata in **6h mattino ➔ Mensa ➔ 2h pomeriggio**)*.")
-    
-    # Pulsanti di preset rapido
-    q_col1, q_col2, _ = st.columns([1.2, 1.2, 3])
-    with q_col1:
-        if st.button("⚡ Tutte a 5h (Lun-Sab)", use_container_width=True, help="Imposta rapidamente 5 ore per tutti i giorni"):
-            problem.config.daily_hours = [5] * num_days
-            st.session_state.result = None
-            st.rerun()
-    with q_col2:
-        if st.button("⚡ Tutte a 6h (Lun-Ven)", use_container_width=True, help="Imposta rapidamente 6 ore per tutti i giorni"):
-            problem.config.daily_hours = [6] * num_days
-            st.session_state.result = None
-            st.rerun()
-
-    cols_days = st.columns(num_days)
-    new_daily_hours = list(problem.config.daily_hours[:num_days])
-    while len(new_daily_hours) < num_days:
-        new_daily_hours.append(5 if num_days == 6 else 6)
-
-    updated_hours = []
-    has_changed = False
-    for d_i in range(num_days):
-        with cols_days[d_i]:
-            val = st.number_input(
-                label=f"**{DAYS_OF_WEEK[d_i]}**",
-                min_value=1,
-                max_value=9,
-                value=int(new_daily_hours[d_i]),
-                step=1,
-                key=f"dh_num_input_{d_i}",
-                help=f"Ore di lezione di {DAYS_OF_WEEK[d_i]}"
+    # -------------------------------------------------------------
+    # 3. ACCORDION 2: ORA DI APPROFONDIMENTO PTOF (1h DPR 89/2009)
+    # -------------------------------------------------------------
+    cur_app_type = getattr(problem.config, "approfondimento_type", "subject")
+    app_label_status = "🟢 [ATTIVO]"
+    with st.expander(f"🎯 Ora di Approfondimento PTOF (1h Quota Autonomia DPR 89/2009) {app_label_status}", expanded=False):
+        c_lng1, c_lng2 = st.columns(2)
+        with c_lng1:
+            cur_second_lang = getattr(problem.config, "second_language", "Spagnolo")
+            lang_list = ["Spagnolo", "Francese", "Tedesco", "Altra Lingua / Personalizzata"]
+            default_l_idx = lang_list.index(cur_second_lang) if cur_second_lang in lang_list else 0
+            sel_l_opt = st.selectbox(
+                "Seconda Lingua Comunitaria (2h settimanali):",
+                lang_list,
+                index=default_l_idx,
+                key=f"sel_lang_opt_{v}",
+                help="Scegli la seconda lingua comunitaria insegnata nella scuola."
             )
-            updated_hours.append(int(val))
-            if int(val) != new_daily_hours[d_i]:
-                has_changed = True
+            if sel_l_opt != getattr(problem.config, "second_language", ""):
+                problem.config.second_language = sel_l_opt
+                if "spa" in problem.subjects:
+                    problem.subjects["spa"].name = f"Seconda Lingua ({sel_l_opt})"
+                st.session_state.result = None
 
-    if has_changed:
-        problem.config.daily_hours = updated_hours
-        st.session_state.result = None
-        st.rerun()
-    # -------------------------------------------------------------
-    # SELEZIONE SECONDA LINGUA COMUNITARIA (2 ORE SETTIMANALI)
-    # -------------------------------------------------------------
-    st.divider()
-    st.subheader("🌍 Seconda Lingua Comunitaria (2 Ore Settimanali)")
-    st.caption("Il piano di studi ordinario delle Scuole Medie (DPR 89/2009) prevede **Inglese (3h)** + **Seconda Lingua Comunitaria (2h)**.")
-    
-    cur_second_lang = getattr(problem.config, "second_language", "Spagnolo")
-    lang_list = ["Spagnolo", "Francese", "Tedesco", "Altra Lingua / Personalizzata"]
-    default_l_idx = 0
-    if cur_second_lang in lang_list:
-        default_l_idx = lang_list.index(cur_second_lang)
-    elif "Francese" in cur_second_lang or cur_second_lang == "Francese":
-        default_l_idx = 1
-    elif "Tedesco" in cur_second_lang or cur_second_lang == "Tedesco":
-        default_l_idx = 2
-    elif cur_second_lang == "Spagnolo":
-        default_l_idx = 0
-    else:
-        default_l_idx = 3
-
-    def on_second_lang_changed():
-        new_sel = st.session_state.get(f"sel_lang_opt_{v}")
-        if new_sel == "Altra Lingua / Personalizzata":
-            target_lang = st.session_state.get(f"custom_lang_input_{v}", "Seconda Lingua").strip() or "Seconda Lingua"
-        else:
-            target_lang = new_sel
-        
-        problem.config.second_language = target_lang
-        if "spa" in problem.subjects:
-            problem.subjects["spa"].name = f"Seconda Lingua ({target_lang})"
-        # Aggiorna aule
-        for r in problem.rooms.values():
-            if "spa" in r.subject_ids and any(k in r.name for k in ["Spagnolo", "Francese", "Tedesco", "Lingue", "Seconda Lingua"]):
-                r.name = f"Aula Lingue ({target_lang})"
-        # Aggiorna parallelismi
-        for pg in getattr(problem, "parallel_groups", []):
-            if pg.subject_id == "spa" and any(k in pg.name for k in ["Spagnolo", "Francese", "Tedesco", "Lingua"]):
-                pg.name = f"Parallelismo Classi - {target_lang}"
-        st.session_state["data_version"] = st.session_state.get("data_version", 0) + 1
-        st.session_state["block_prefs_version"] = st.session_state.get("block_prefs_version", 0) + 1
-        st.session_state.result = None
-
-    c_lng1, c_lng2 = st.columns(2)
-    with c_lng1:
-        sel_l_opt = st.selectbox(
-            "Lingua Comunitaria insegnata nella scuola:",
-            lang_list,
-            index=default_l_idx,
-            key=f"sel_lang_opt_{v}",
-            on_change=on_second_lang_changed,
-            help="Scegli la seconda lingua comunitaria per la quale assegnare cattedre e docenti."
+        app_type = st.radio(
+            "Come viene utilizzata l'ora di Approfondimento nella tua scuola?",
+            ["Potenziamento di una Materia Tradizionale (+1h)", "🎭 Attività / Laboratorio Dedicato (es. Teatro, Coding, Robotica)"],
+            index=0 if cur_app_type == "subject" else 1,
+            horizontal=True
         )
-    
-    if sel_l_opt == "Altra Lingua / Personalizzata":
-        with c_lng2:
-            custom_lang_val = st.text_input(
-                "Specifica nome lingua:",
-                value=cur_second_lang if cur_second_lang not in ["Spagnolo", "Francese", "Tedesco"] else "Spagnolo",
-                key=f"custom_lang_input_{v}",
-                on_change=on_second_lang_changed
-            )
-            final_lang_name = custom_lang_val.strip() or "Seconda Lingua"
-    else:
-        final_lang_name = sel_l_opt
-        with c_lng2:
-            st.info(f"Materia: **Seconda Lingua ({sel_l_opt})** | Monte ore: **2h / settimana** per classe")
 
-    if final_lang_name != getattr(problem.config, "second_language", ""):
-        problem.config.second_language = final_lang_name
-        if "spa" in problem.subjects:
-            problem.subjects["spa"].name = f"Seconda Lingua ({final_lang_name})"
-        for r in problem.rooms.values():
-            if "spa" in r.subject_ids and any(k in r.name for k in ["Spagnolo", "Francese", "Tedesco", "Lingue", "Seconda Lingua"]):
-                r.name = f"Aula Lingue ({final_lang_name})"
-        for pg in getattr(problem, "parallel_groups", []):
-            if pg.subject_id == "spa" and any(k in pg.name for k in ["Spagnolo", "Francese", "Tedesco", "Lingua"]):
-                pg.name = f"Parallelismo Classi - {final_lang_name}"
-        st.session_state["data_version"] = st.session_state.get("data_version", 0) + 1
-        st.session_state["block_prefs_version"] = st.session_state.get("block_prefs_version", 0) + 1
-        st.session_state.result = None
-        st.rerun()
-
-    # -------------------------------------------------------------
-    # SELEZIONE ORA DI APPROFONDIMENTO PTOF (DPR 89/2009)
-    # -------------------------------------------------------------
-    st.divider()
-    st.subheader("🎯 Quota Autonomia: Destinazione Ora di Approfondimento (1h PTOF)")
-    st.caption("Il quadro nazionale delle Scuole Medie prevede **29 ore fisse** + **1 ora di Approfondimento** a scelta del Collegio Docenti (DPR 89/2009).")
-    
-    app_type = st.radio(
-        "Come viene utilizzata l'ora di Approfondimento nella tua scuola?",
-        ["Potenziamento di una Materia Tradizionale (+1h)", "🎭 Attività / Laboratorio Dedicato (es. Teatro, Coding, Madrelingua, Ed. Civica)"],
-        index=0 if getattr(problem.config, "approfondimento_type", "subject") == "subject" else 1,
-        horizontal=True
-    )
-
-    if "Potenziamento" in app_type:
-        if getattr(problem.config, "approfondimento_type", "subject") != "subject":
+        if "Potenziamento" in app_type:
             problem.config.approfondimento_type = "subject"
-            problem.assignments = [a for a in problem.assignments if a.subject_id != "app_custom"]
-            for a in problem.assignments:
-                if a.subject_id == "ita" and a.hours_per_week == 5:
-                    a.hours_per_week = 6
-                elif a.subject_id == "mat" and a.hours_per_week == 3:
-                    a.hours_per_week = 4
-        
-        problem.config.approfondimento_type = "subject"
-        approfondimento_map = {
-            "ita": "✍️ Italiano / Lettere (Italiano passa da 5h a 6h -> Totale Lettere 10h)",
-            "mat": "📐 Matematica (Matematica passa da 4h a 5h -> Totale Mat/Sci 7h)",
-            "sci": "🔬 Scienze Sperimentali (Scienze passa da 2h a 3h -> Totale Mat/Sci 7h)",
-            "ing": "🇬🇧 Potenziamento Inglese (Inglese passa da 3h a 4h)",
-            "tec": "💻 Tecnologia / Coding (Tecnologia passa da 2h a 3h)",
-            "spa": "🇪🇸 Seconda Lingua Comunitaria (Spagnolo/Francese passa da 2h a 3h)"
-        }
-        
-        curr_app = getattr(problem.config, "approfondimento_subject", "ita")
-        if curr_app not in approfondimento_map:
-            curr_app = "ita"
-            
-        chosen_app_key = st.selectbox(
-            "Seleziona la disciplina da potenziare:",
-            options=list(approfondimento_map.keys()),
-            index=list(approfondimento_map.keys()).index(curr_app),
-            format_func=lambda k: approfondimento_map[k]
-        )
-        problem.config.approfondimento_subject = chosen_app_key
-    else:
-        problem.config.approfondimento_type = "custom_activity"
-        st.info("💡 **Attività / Laboratorio Dedicato**: Crea una disciplina autonoma da 1h settimanale per classe (es. *Teatro*, *Coding / Robotica*, *Cittadinanza*, *Madrelingua Inglese*) e associale la **Classe di Concorso (CdC)** di riferimento e l'eventuale aula dedicata.")
-        
-        c_app1, c_app2 = st.columns(2)
-        with c_app1:
-            custom_act_name = st.text_input("Nome Attività PTOF", value=getattr(problem.config, "approfondimento_custom_name", "Laboratorio di Teatro"), placeholder="es. Laboratorio di Teatro, Coding & Robotica")
-            custom_room_name = st.text_input("Aula / Spazio Dedicato (opzionale)", value="Aula Magna / Teatro" if "Teatro" in custom_act_name else "Laboratorio STEM", placeholder="es. Aula Magna, Teatro, Lab STEM")
-        with c_app2:
-            cdc_options = [
-                "A-22 (Lettere - Italiano, Storia, Geografia)",
-                "A-28 (Matematica e Scienze)",
-                "A-24 (Lingue Straniere - Inglese / Seconda Lingua)",
-                "A-60 (Tecnologia)",
-                "A-30 (Musica)",
-                "A-01 (Arte e Immagine)",
-                "A-48 (Scienze Motorie e Sportive)",
-                "Docente di Religione / Alternativa",
-                "Altra CdC / Interdisciplinare"
-            ]
-            cur_cdc = getattr(problem.config, "approfondimento_cdc", "A-22")
-            cdc_idx = 0
-            for idx_cdc, opt_str in enumerate(cdc_options):
-                if cur_cdc in opt_str:
-                    cdc_idx = idx_cdc
-                    break
-            chosen_cdc_label = st.selectbox("Classe di Concorso (CdC) Attribuita", cdc_options, index=cdc_idx, help="Anche se promossa dal PTOF, l'attività deve essere formalmente attribuita a una specifica classe di concorso docente (es. Teatro ai docenti di Lettere A-22).")
-            chosen_cdc_code = chosen_cdc_label.split(" ")[0]
-            custom_color = st.color_picker("Colore Identificativo", "#e84393")
+            approfondimento_map = {
+                "ita": "✍️ Italiano / Lettere (Italiano passa da 5h a 6h -> Totale Lettere 10h)",
+                "mat": "📐 Matematica (Matematica passa da 4h a 5h -> Totale Mat/Sci 7h)",
+                "sci": "🔬 Scienze Sperimentali (Scienze passa da 2h a 3h -> Totale Mat/Sci 7h)",
+                "ing": "🇬🇧 Potenziamento Inglese (Inglese passa da 3h a 4h)",
+                "tec": "💻 Tecnologia / Coding (Tecnologia passa da 2h a 3h)",
+                "spa": "🇪🇸 Seconda Lingua Comunitaria (Spagnolo/Francese passa da 2h a 3h)"
+            }
+            curr_app = getattr(problem.config, "approfondimento_subject", "ita")
+            chosen_app_key = st.selectbox(
+                "Seleziona la disciplina da potenziare:",
+                options=list(approfondimento_map.keys()),
+                index=list(approfondimento_map.keys()).index(curr_app) if curr_app in approfondimento_map else 0,
+                format_func=lambda k: approfondimento_map[k]
+            )
+            problem.config.approfondimento_subject = chosen_app_key
+        else:
+            problem.config.approfondimento_type = "custom_activity"
+            c_app1, c_app2 = st.columns(2)
+            with c_app1:
+                custom_act_name = st.text_input("Nome Attività PTOF", value=getattr(problem.config, "approfondimento_custom_name", "Laboratorio di Teatro"))
+                custom_room_name = st.text_input("Aula / Spazio Dedicato (opzionale)", value="Spazio Teatro (2 Aule)")
+            with c_app2:
+                cdc_options = [
+                    "A-22 (Lettere - Italiano, Storia, Geografia)",
+                    "A-28 (Matematica e Scienze)",
+                    "A-24 (Lingue Straniere)",
+                    "A-60 (Tecnologia)",
+                    "A-30 (Musica)",
+                    "A-01 (Arte e Immagine)"
+                ]
+                cur_cdc = getattr(problem.config, "approfondimento_cdc", "A-22")
+                cdc_idx = next((i for i, opt in enumerate(cdc_options) if cur_cdc in opt), 0)
+                chosen_cdc_label = st.selectbox("Classe di Concorso (CdC) Attribuita", cdc_options, index=cdc_idx)
+                chosen_cdc_code = chosen_cdc_label.split(" ")[0]
 
-        # Selettore disciplina da cui sottrarre 1h se la CdC insegna più materie
-        deduct_choice = "none"
-        if chosen_cdc_code == "A-22":
-            st.markdown("⚖️ **Compensazione Oraria della CdC Lettere (A-22)**:")
             deduct_options = {
                 "ita": "✍️ Togli a Italiano (Italiano passa da 6h a 5h + 1h Teatro -> Totale CdC Lettere resta 10h)",
                 "sto": "📜 Togli a Storia (Storia passa da 2h a 1h + 1h Teatro -> Totale CdC Lettere resta 10h)",
@@ -2693,110 +2508,26 @@ with tabs[0]:
             ded_keys = list(deduct_options.keys())
             d_idx = ded_keys.index(cur_ded) if cur_ded in ded_keys else 0
             deduct_choice = st.radio(
-                "A quale disciplina di Lettere togli 1 ora per fare spazio all'attività PTOF?",
-                options=ded_keys,
-                index=d_idx,
-                format_func=lambda k: deduct_options[k]
-            )
-        elif chosen_cdc_code == "A-28":
-            st.markdown("⚖️ **Compensazione Oraria della CdC Mat/Scienze (A-28)**:")
-            deduct_options = {
-                "mat": "📐 Togli a Matematica (Matematica passa da 4h a 3h + 1h Lab -> Totale CdC resta 6h)",
-                "sci": "🔬 Togli a Scienze (Scienze passa da 2h a 1h + 1h Lab -> Totale CdC resta 6h)",
-                "none": "➕ Nessuna (Ora aggiuntiva PTOF)"
-            }
-            cur_ded = getattr(problem.config, "approfondimento_deduct_from", "mat")
-            ded_keys = list(deduct_options.keys())
-            d_idx = ded_keys.index(cur_ded) if cur_ded in ded_keys else 0
-            deduct_choice = st.radio(
-                "A quale disciplina di Matematica/Scienze togli 1 ora?",
+                "Compensazione Oraria della CdC:",
                 options=ded_keys,
                 index=d_idx,
                 format_func=lambda k: deduct_options[k]
             )
 
-        problem.config.approfondimento_custom_name = custom_act_name
-        problem.config.approfondimento_cdc = chosen_cdc_code
-        problem.config.approfondimento_deduct_from = deduct_choice
-        
-        # Registra la materia, i 2 spazi teatro dedicati e sincronizza istantaneamente le cattedre
-        if st.button("✨ Registra Attività PTOF e Assegna Automaticamente alle Cattedre", type="primary", use_container_width=True):
-            act_id = "app_custom"
-            
-            # Crea SEMPRE 2 spazi teatro per evitare colli di bottiglia e far quadrare le 18 classi
-            problem.rooms["aula_teatro_1"] = Classroom(
-                id="aula_teatro_1",
-                name="Spazio Teatro 1 (Palcoscenico / Aula Magna)",
-                subject_ids=[act_id],
-                capacity=1,
-                is_special_lab=True
-            )
-            problem.rooms["aula_teatro_2"] = Classroom(
-                id="aula_teatro_2",
-                name="Spazio Teatro 2 (Laboratorio Espressivo)",
-                subject_ids=[act_id],
-                capacity=1,
-                is_special_lab=True
-            )
-            if "aula_teatro" in problem.rooms:
-                del problem.rooms["aula_teatro"]
-            
-            problem.subjects[act_id] = Subject(
-                id=act_id,
-                name=f"{custom_act_name}",
-                color=custom_color,
-                cdc=chosen_cdc_code
-            )
-            problem.config.approfondimento_subject = act_id
-            
-            # Sincronizza le cattedre: scala 1h da Italiano (da 6h a 5h) e assegna 1h di Teatro allo stesso docente di Lettere
-            problem.assignments = [a for a in problem.assignments if a.subject_id != act_id]
-            added_classes = 0
-            if deduct_choice == "ita":
-                for a in problem.assignments:
-                    if a.subject_id == "ita":
-                        a.hours_per_week = 5
-                        problem.assignments.append(TeachingAssignment(
-                            id=f"a_{a.class_id}_{act_id}".lower(),
-                            teacher_id=a.teacher_id,
-                            class_id=a.class_id,
-                            subject_id=act_id,
-                            hours_per_week=1,
-                            force_double_hours=False,
-                            max_daily_hours=1
-                        ))
-                        added_classes += 1
-            elif deduct_choice == "mat":
-                for a in problem.assignments:
-                    if a.subject_id == "mat":
-                        a.hours_per_week = 3
-                        problem.assignments.append(TeachingAssignment(
-                            id=f"a_{a.class_id}_{act_id}".lower(),
-                            teacher_id=a.teacher_id,
-                            class_id=a.class_id,
-                            subject_id=act_id,
-                            hours_per_week=1,
-                            force_double_hours=False,
-                            max_daily_hours=1
-                        ))
-                        added_classes += 1
-
-            st.success(f"✅ Attività '{custom_act_name}' configurata con **2 Spazi Teatro Dedicati** e assegnata ai docenti di Lettere per **{added_classes} classi** (Italiano a 5h + 1h Teatro -> 30h esatte per classe e max 1-2h Teatro per docente).")
-            st.rerun()
+            problem.config.approfondimento_custom_name = custom_act_name
+            problem.config.approfondimento_cdc = chosen_cdc_code
+            problem.config.approfondimento_deduct_from = deduct_choice
 
     # -------------------------------------------------------------
-    # 1. SEZIONE INDIRIZZO MUSICALE (32h) - SEPARATA E FLAGGABILE
+    # 4. ACCORDION 3: INDIRIZZO MUSICALE (32h)
     # -------------------------------------------------------------
-    st.divider()
-    st.subheader("🎼 1. Indirizzo Musicale (32 Ore)")
-    st.caption("Attiva e configura le sezioni a indirizzo musicale (32h/settimana con 2h di Orchestra/Musica d'Insieme, 4 docenti di strumento in compresenza e rientri pomeridiani).")
-
-    with st.container(border=True):
+    has_mus_curr = bool(getattr(problem.config, "has_musical_curriculum", False))
+    with st.expander(f"🎼 Indirizzo Musicale (32 Ore - con Rientro e Mensa) {'🟢 [ATTIVO]' if has_mus_curr else '⚪ [DISATTIVATO]'}", expanded=has_mus_curr):
         col_m_tog, col_m_info = st.columns([1.5, 2.5])
         with col_m_tog:
             has_mus = st.toggle(
                 "🎼 **Attiva Indirizzo Musicale (32h)**",
-                value=bool(getattr(problem.config, "has_musical_curriculum", False)),
+                value=has_mus_curr,
                 key="tab1_toggle_musical_curriculum"
             )
             problem.config.has_musical_curriculum = has_mus
@@ -2818,7 +2549,7 @@ with tabs[0]:
                     "Sezione a Indirizzo Musicale (32h):",
                     options=all_sections,
                     index=all_sections.index(cur_mus_sec) if cur_mus_sec in all_sections else 0,
-                    help="Tutte le classi di questa sezione (es. 1F, 2F, 3F) avranno orario a 32h settimanali con 2h di Orchestra/Musica d'Insieme."
+                    help="Tutte le classi di questa sezione (es. 1F, 2F, 3F) avranno orario a 32h settimanali."
                 )
                 problem.config.musical_section = chosen_mus_sec
             with c_m_co:
@@ -2826,20 +2557,17 @@ with tabs[0]:
                     "Docenti in compresenza per Orchestra:", 
                     min_value=1, max_value=4, 
                     value=int(getattr(problem.config, "musical_orchestra_co_teachers", 4)), 
-                    step=1,
-                    help="Numero di docenti di strumento compresenti contemporaneamente nelle 2h di Orchestra / Solfeggio."
+                    step=1
                 )
                 problem.config.musical_orchestra_co_teachers = co_doc_num
 
-            st.markdown("##### 🎻 Strumenti del Corso Musicale:")
             inst_txt = st.text_input(
                 "Strumenti musicali attivi (separati da virgola):", 
-                value=", ".join(getattr(problem.config, "musical_instruments", ["Flauto", "Violino", "Chitarra", "Clarinetto"])),
-                help="I 4 strumenti della scuola con cattedra A-56 / A-30."
+                value=", ".join(getattr(problem.config, "musical_instruments", ["Flauto", "Violino", "Chitarra", "Clarinetto"]))
             )
             problem.config.musical_instruments = [x.strip() for x in inst_txt.split(",") if x.strip()]
 
-            # Sincronizza le classi della sezione scelta a 32h e inietta le 2h di Orchestra se mancanti
+            # Inietta le 2h di orchestra e assicura i docenti A-56
             orch_subj_id = "orch"
             solf_subj_id = "solf"
             if orch_subj_id not in problem.subjects:
@@ -2847,7 +2575,6 @@ with tabs[0]:
             if solf_subj_id not in problem.subjects:
                 problem.subjects[solf_subj_id] = Subject(id=solf_subj_id, name="Teoria e Solfeggio / Lettura", color="#b45309", cdc="A-56 / A-30", is_musical_discipline=True, default_double_hours=False)
 
-            # Assicura presenza dei 4 docenti di strumento
             inst_teachers = [
                 ("doc_str_violino", "Prof. Brutti Ilario (Violino)", "A-56 Violino"),
                 ("doc_str_clarinetto", "Prof. Carriglio Antonino (Clarinetto)", "A-56 Clarinetto"),
@@ -2863,13 +2590,10 @@ with tabs[0]:
                     )
 
             co_teachers_ids = ["doc_str_clarinetto", "doc_str_flauto", "doc_str_chitarra"]
-
             for c_id, c_obj in problem.classes.items():
                 if c_obj.section == chosen_mus_sec:
                     c_obj.curriculum_type = "musicale"
                     c_obj.weekly_hours_target = 32
-                    
-                    # Verifica se la classe ha già la cattedra di orchestra a 2h
                     c_orch_assigns = [a for a in problem.assignments if a.class_id == c_id and a.subject_id == orch_subj_id]
                     if not c_orch_assigns:
                         problem.assignments.append(TeachingAssignment(
@@ -2884,18 +2608,8 @@ with tabs[0]:
                             preferred_time_of_day="any",
                             preferred_room_id="auditorium" if "auditorium" in problem.rooms else None
                         ))
-                    else:
-                        for oa in c_orch_assigns:
-                            oa.hours_per_week = 2
-                            oa.co_teacher_ids = co_teachers_ids
-                            oa.preferred_time_of_day = "any"
-                elif getattr(c_obj, "curriculum_type", "ordinario") == "musicale" and c_obj.section != chosen_mus_sec:
-                    c_obj.curriculum_type = "ordinario"
-                    c_obj.weekly_hours_target = 30
-                    # Rimuovi l'orchestra dalla vecchia classe non più musicale
-                    problem.assignments = [a for a in problem.assignments if not (a.class_id == c_id and a.subject_id == orch_subj_id)]
 
-            st.markdown("##### 📅 Pomeriggi di Rientro & Mensa per Classe Musicale:")
+            st.markdown("##### 📅 Pomeriggi di Rientro, Pausa Mensa & Compresenze:")
             mus_classes_list = [c for c in problem.classes.values() if c.section == chosen_mus_sec or c.curriculum_type == "musicale"]
             if mus_classes_list:
                 for mus_c in mus_classes_list:
@@ -2903,87 +2617,46 @@ with tabs[0]:
                     with c_col_n:
                         st.markdown(f"**Classe {mus_c.name}** *(32h)*")
                     with c_col_d:
-                        cur_aft = getattr(mus_c, "afternoon_days", []) or ["Lunedì"]
-                        chosen_aft = st.multiselect(
-                            f"Pomeriggi rientro {mus_c.name}",
-                            options=DAYS_OF_WEEK[:problem.config.num_days],
-                            default=[d for d in cur_aft if d in DAYS_OF_WEEK[:problem.config.num_days]] or [DAYS_OF_WEEK[0]],
-                            key=f"mus_class_aft_sel_{mus_c.id}",
-                            label_visibility="collapsed"
-                        )
+                        chosen_aft = st.multiselect(f"Pomeriggi rientro {mus_c.name}", options=DAYS_OF_WEEK[:problem.config.num_days], default=getattr(mus_c, "afternoon_days", []) or [DAYS_OF_WEEK[0]], key=f"mus_class_aft_sel_{mus_c.id}", label_visibility="collapsed")
                         mus_c.afternoon_days = chosen_aft
                     with c_col_m:
-                        cur_l = getattr(mus_c, "lunch_break_duration", 60)
-                        c_lunch_opts = [0, 30, 60, 90]
-                        chosen_c_lunch = st.selectbox(
-                            f"Mensa {mus_c.name}",
-                            options=c_lunch_opts,
-                            index=c_lunch_opts.index(cur_l) if cur_l in c_lunch_opts else 2,
-                            format_func=lambda m: "🚫 No Mensa (7ªh lez.)" if m == 0 else f"🍝 {m} min",
-                            key=f"mus_class_lunch_sel_{mus_c.id}",
-                            label_visibility="collapsed"
-                        )
+                        c_l = getattr(mus_c, "lunch_break_duration", 60)
+                        chosen_c_lunch = st.selectbox(f"Mensa {mus_c.name}", options=[0, 30, 60, 90], index=[0, 30, 60, 90].index(c_l) if c_l in [0, 30, 60, 90] else 2, format_func=lambda m: "🚫 No Mensa (7ªh lez.)" if m == 0 else f"🍝 {m} min", key=f"mus_class_lunch_sel_{mus_c.id}", label_visibility="collapsed")
                         mus_c.lunch_break_duration = chosen_c_lunch
 
-                st.markdown("---")
-                st.markdown("##### 📌 Fissaggio Esatto Slot Orari Compresenza (Orchestra & Solfeggio):")
-                default_pin_schedule = {
-                    1: {"d1": 0, "h1": 6, "d2": 2, "h2": 3},
-                    2: {"d1": 0, "h1": 7, "d2": 2, "h2": 1},
-                    3: {"d1": 0, "h1": 8, "d2": 2, "h2": 2},
-                }
-                
+                st.markdown("##### 📌 Fissaggio Esatto Slot Orari Compresenza (Orchestra):")
                 for mus_c in mus_classes_list:
                     c_orch_assign = next((a for a in problem.assignments if a.class_id == mus_c.id and a.subject_id in ["orch", "solf"]), None)
                     if c_orch_assign:
                         cur_pins = getattr(c_orch_assign, "pinned_slots", []) or []
                         c_p_title, c_p_d1, c_p_h1, c_p_d2, c_p_h2 = st.columns([1.5, 1.3, 1.1, 1.3, 1.1])
-                        def_sch = default_pin_schedule.get(mus_c.grade, {"d1": 0, "h1": 1, "d2": 2, "h2": 2})
-                        
                         with c_p_title:
-                            st.markdown(f"🎼 **Compresenza {mus_c.name}** *(2h)*")
+                            st.markdown(f"🎻 **{mus_c.name}** (Orchestra):")
+                        def_sch = {"d1": 0, "h1": 6, "d2": 2, "h2": 3}
                         with c_p_d1:
                             p1_d = cur_pins[0][0] if len(cur_pins) > 0 and cur_pins[0][0] < problem.config.num_days else def_sch["d1"]
                             sel_d1 = st.selectbox(f"1ªh Giorno {mus_c.name}", DAYS_OF_WEEK[:problem.config.num_days], index=p1_d, key=f"pin_mus_d1_{mus_c.id}", label_visibility="collapsed")
                             idx_d1 = DAYS_OF_WEEK.index(sel_d1)
                         with c_p_h1:
-                            max_h1 = max(9, problem.config.daily_hours[idx_d1] if idx_d1 < len(problem.config.daily_hours) else 6)
-                            p1_h = min(cur_pins[0][1], max_h1 - 1) if len(cur_pins) > 0 else min(def_sch["h1"], max_h1 - 1)
-                            sel_h1 = st.selectbox(f"1ªh Ora {mus_c.name}", list(range(max_h1)), index=p1_h, format_func=lambda x: f"{x+1}ª ora", key=f"pin_mus_h1_{mus_c.id}", label_visibility="collapsed")
+                            sel_h1 = st.selectbox(f"1ªh Ora {mus_c.name}", list(range(9)), index=min(cur_pins[0][1] if len(cur_pins) > 0 else def_sch["h1"], 8), format_func=lambda x: f"{x+1}ª ora", key=f"pin_mus_h1_{mus_c.id}", label_visibility="collapsed")
                         with c_p_d2:
                             p2_d = cur_pins[1][0] if len(cur_pins) > 1 and cur_pins[1][0] < problem.config.num_days else def_sch["d2"]
                             sel_d2 = st.selectbox(f"2ªh Giorno {mus_c.name}", DAYS_OF_WEEK[:problem.config.num_days], index=p2_d, key=f"pin_mus_d2_{mus_c.id}", label_visibility="collapsed")
                             idx_d2 = DAYS_OF_WEEK.index(sel_d2)
                         with c_p_h2:
-                            max_h2 = max(9, problem.config.daily_hours[idx_d2] if idx_d2 < len(problem.config.daily_hours) else 6)
-                            p2_h = min(cur_pins[1][1], max_h2 - 1) if len(cur_pins) > 1 else min(def_sch["h2"], max_h2 - 1)
-                            sel_h2 = st.selectbox(f"2ªh Ora {mus_c.name}", list(range(max_h2)), index=p2_h, format_func=lambda x: f"{x+1}ª ora", key=f"pin_mus_h2_{mus_c.id}", label_visibility="collapsed")
-                        
-                        new_pins = [[idx_d1, sel_h1], [idx_d2, sel_h2]]
-                        c_orch_assign.pinned_slots = new_pins
-            else:
-                st.info("Nessuna classe trovata per la sezione musicale selezionata.")
-        else:
-            # Se disattivato, ripristina le classi musicali a 30h ordinarie
-            for c_obj in problem.classes.values():
-                if getattr(c_obj, "curriculum_type", "ordinario") == "musicale":
-                    c_obj.curriculum_type = "ordinario"
-                    c_obj.weekly_hours_target = 30
-            problem.assignments = [a for a in problem.assignments if a.subject_id not in ["orch", "solf"]]
+                            sel_h2 = st.selectbox(f"2ªh Ora {mus_c.name}", list(range(9)), index=min(cur_pins[1][1] if len(cur_pins) > 1 else def_sch["h2"], 8), format_func=lambda x: f"{x+1}ª ora", key=f"pin_mus_h2_{mus_c.id}", label_visibility="collapsed")
+                        c_orch_assign.pinned_slots = [[idx_d1, sel_h1], [idx_d2, sel_h2]]
 
     # -------------------------------------------------------------
-    # 2. SEZIONE TEMPO PROLUNGATO (36h) - SEPARATA E FLAGGABILE
+    # 5. ACCORDION 4: TEMPO PROLUNGATO (36h)
     # -------------------------------------------------------------
-    st.divider()
-    st.subheader("🕒 2. Tempo Prolungato (36 Ore)")
-    st.caption("Attiva e configura le sezioni o classi a tempo prolungato (36h/settimana con 2 rientri pomeridiani e mensa).")
-
-    with st.container(border=True):
+    has_ext_curr = bool(getattr(problem.config, "has_extended_curriculum", False))
+    with st.expander(f"🕒 Tempo Prolungato (36 Ore - con 2 Rientri e Mensa) {'🟢 [ATTIVO]' if has_ext_curr else '⚪ [DISATTIVATO]'}", expanded=has_ext_curr):
         col_p_tog, col_p_info = st.columns([1.5, 2.5])
         with col_p_tog:
             has_ext = st.toggle(
                 "🕒 **Attiva Tempo Prolungato (36h)**",
-                value=bool(getattr(problem.config, "has_extended_curriculum", False)) or any(getattr(c, "curriculum_type", "") == "prolungato" for c in problem.classes.values()),
+                value=has_ext_curr,
                 key="tab1_toggle_extended_curriculum"
             )
             problem.config.has_extended_curriculum = has_ext
@@ -2996,53 +2669,29 @@ with tabs[0]:
         if has_ext:
             all_sections_ext = sorted(list(set(c.section for c in problem.classes.values()))) if problem.classes else ["A", "B", "C", "D", "E", "F"]
             cur_ext_sec = getattr(problem.config, "extended_section", "") or ("D" if "D" in all_sections_ext else (all_sections_ext[0] if all_sections_ext else "D"))
-            if cur_ext_sec not in all_sections_ext and all_sections_ext:
-                cur_ext_sec = all_sections_ext[0]
-
             c_ext_s1, c_ext_s2 = st.columns(2)
             with c_ext_s1:
-                chosen_ext_sec = st.selectbox(
-                    "Sezione a Tempo Prolungato (36h):",
-                    options=["Tutte Selezionate Manualmente"] + all_sections_ext,
-                    index=(all_sections_ext.index(cur_ext_sec) + 1) if cur_ext_sec in all_sections_ext else 0,
-                    help="Seleziona un'intera sezione da impostare a 36h, oppure scegli le singole classi."
-                )
+                chosen_ext_sec = st.selectbox("Sezione a Tempo Prolungato (36h):", options=["Tutte Selezionate Manualmente"] + all_sections_ext, index=(all_sections_ext.index(cur_ext_sec) + 1) if cur_ext_sec in all_sections_ext else 0)
                 if chosen_ext_sec != "Tutte Selezionate Manualmente":
                     problem.config.extended_section = chosen_ext_sec
                     for c_obj in problem.classes.values():
                         if c_obj.section == chosen_ext_sec and getattr(c_obj, "curriculum_type", "") != "musicale":
-                            c_obj.curriculum_type = "prolungato"
-                            c_obj.weekly_hours_target = 36
-
+                            c_obj.curriculum_type = "prolungato"; c_obj.weekly_hours_target = 36
             with c_ext_s2:
                 ext_lunch_opts = [0, 30, 60, 90]
                 cur_ext_l = getattr(problem.config, "default_lunch_break_duration", 60)
-                sel_ext_lunch = st.selectbox(
-                    "Pausa Mensa Tempo Prolungato:",
-                    options=ext_lunch_opts,
-                    index=ext_lunch_opts.index(cur_ext_l) if cur_ext_l in ext_lunch_opts else 2,
-                    format_func=lambda m: "🚫 Nessuna Mensa (7ª Ora continua)" if m == 0 else f"🍝 {m} minuti ({'mezz\'ora' if m==30 else ('1 ora' if m==60 else '1 ora e mezza')})",
-                    key="ext_lunch_sel_box"
-                )
+                sel_ext_lunch = st.selectbox("Pausa Mensa Tempo Prolungato:", options=ext_lunch_opts, index=ext_lunch_opts.index(cur_ext_l) if cur_ext_l in ext_lunch_opts else 2, format_func=lambda m: "🚫 Nessuna Mensa" if m == 0 else f"🍝 {m} minuti", key="ext_lunch_sel_box")
+                problem.config.default_lunch_break_duration = sel_ext_lunch
 
-            # Selezione classi a tempo prolungato e relativi pomeriggi
-            st.markdown("##### 📅 Pomeriggi di Rientro per Classi a Tempo Prolungato (36h):")
             ext_classes_list = [c for c in problem.classes.values() if getattr(c, "curriculum_type", "ordinario") == "prolungato"]
             if ext_classes_list:
-                st.success(f"Classi a Tempo Prolungato attive: **{', '.join(c.name for c in ext_classes_list)}** (36h con 2 pomeriggi)")
                 for ext_c in ext_classes_list:
                     cur_ext_aft = getattr(ext_c, "afternoon_days", []) or ["Martedì", "Giovedì"]
-                    chosen_ext_aft = st.multiselect(
-                        f"Pomeriggi rientro {ext_c.name} (36h):",
-                        options=DAYS_OF_WEEK[:problem.config.num_days],
-                        default=[d for d in cur_ext_aft if d in DAYS_OF_WEEK[:problem.config.num_days]],
-                        key=f"ext_class_aft_sel_{ext_c.id}"
-                    )
+                    chosen_ext_aft = st.multiselect(f"Pomeriggi rientro {ext_c.name} (36h):", options=DAYS_OF_WEEK[:problem.config.num_days], default=[d for d in cur_ext_aft if d in DAYS_OF_WEEK[:problem.config.num_days]], key=f"ext_class_aft_sel_{ext_c.id}")
                     ext_c.afternoon_days = chosen_ext_aft
             else:
                 st.info("Nessuna classe attualmente impostata a Tempo Prolungato (36h). Puoi impostarla dalla Scheda 3.")
         else:
-            # Se disattivato, ripristina le classi a tempo prolungato a 30h ordinarie
             for c_obj in problem.classes.values():
                 if getattr(c_obj, "curriculum_type", "ordinario") == "prolungato":
                     c_obj.curriculum_type = "ordinario"
@@ -3173,20 +2822,22 @@ with tabs[1]:
     
         st.caption("Usa le azioni multiple sopra per cancellare in blocco, oppure l'icona ✏️ / 🗑️ su ciascuna riga.")
         
-        # Header Tabella Docenti
-        hdr_cols = st.columns([3, 2, 2, 2, 1, 1])
-        with hdr_cols[0]:
-            st.markdown("**Docente & Cattedra**")
-        with hdr_cols[1]:
-            st.markdown("**Contratto**")
-        with hdr_cols[2]:
-            st.markdown("**Giorno Libero**")
-        with hdr_cols[3]:
-            st.markdown("**Desiderata / Vincoli**")
-        with hdr_cols[4]:
-            st.markdown("**Modifica**")
-        with hdr_cols[5]:
-            st.markdown("**Elimina**")
+        # Header Tabella Docenti (reattivo a 5 vs 6 giorni)
+        if is_settimana_corta:
+            hdr_cols = st.columns([3, 2, 3, 1, 1])
+            with hdr_cols[0]: st.markdown("**Docente & Cattedra**")
+            with hdr_cols[1]: st.markdown("**Contratto**")
+            with hdr_cols[2]: st.markdown("**Desiderata / Vincoli Orari**")
+            with hdr_cols[3]: st.markdown("**Modifica**")
+            with hdr_cols[4]: st.markdown("**Elimina**")
+        else:
+            hdr_cols = st.columns([3, 2, 2, 2, 1, 1])
+            with hdr_cols[0]: st.markdown("**Docente & Cattedra**")
+            with hdr_cols[1]: st.markdown("**Contratto**")
+            with hdr_cols[2]: st.markdown("**Giorno Libero**")
+            with hdr_cols[3]: st.markdown("**Desiderata / Vincoli**")
+            with hdr_cols[4]: st.markdown("**Modifica**")
+            with hdr_cols[5]: st.markdown("**Elimina**")
             
         st.divider()
     
@@ -3221,21 +2872,10 @@ with tabs[1]:
                     pt_details.append(f"max {max_w_days} gg")
                 contratto_label = f"⏱️ **Part-Time** ({', '.join(pt_details)})"
             else:
-                contratto_label = "💼 Tempo Pieno (18h)"
-    
-            if is_settimana_corta and not is_pt:
-                giorno_libero_str = "5/5 gg (Tempo Pieno)"
-            else:
-                f_list = getattr(t, "free_days", [])
-                if not f_list:
-                    f_list = []
-                    if getattr(t, "free_day_1", None): f_list.append(t.free_day_1)
-                    if getattr(t, "free_day_2", None): f_list.append(t.free_day_2)
-                
-                if f_list:
-                    giorno_libero_str = ", ".join(f_list)
-                else:
-                    giorno_libero_str = "-"
+            f_list = []
+            if getattr(t, "free_day_1", None): f_list.append(t.free_day_1)
+            if getattr(t, "free_day_2", None): f_list.append(t.free_day_2)
+            giorno_libero_str = ", ".join(f_list) if f_list else "-"
     
             req_count = len(getattr(t, "required_slots", []))
             t_assigns = [a for a in problem.assignments if a.teacher_id == tid or tid in getattr(a, "co_teacher_ids", [])]
@@ -3281,38 +2921,60 @@ with tabs[1]:
             t_subjs_str = get_teacher_subjects_display(t, problem)
             pt_badge = " ⏱️ `[PART-TIME]`" if is_pt else ""
     
-            row_cols = st.columns([3, 2, 2, 2, 1, 1])
-            is_curr_editing = (st.session_state.editing_teacher_id == tid)
-            with row_cols[0]:
-                doc_name_styled = f"👉 **{t.name}**{pt_badge} *(in modifica qui sotto 👇)*  \n📖 *{t_subjs_str}*  \n{classes_txt}" if is_curr_editing else f"**{t.name}**{pt_badge}  \n📖 *{t_subjs_str}*  \n{classes_txt}"
-                st.markdown(doc_name_styled)
-            with row_cols[1]:
-                st.markdown(contratto_label)
-            with row_cols[2]:
-                st.write(giorno_libero_str)
-            with row_cols[3]:
-                st.caption(desiderata_str)
-            with row_cols[4]:
-                edit_icon = "❌" if is_curr_editing else "✏️"
-                edit_help = f"Chiudi modifica di {t.name}" if is_curr_editing else f"Modifica {t.name} direttamente qui sotto"
-                if st.button(edit_icon, key=f"edit_btn_{tid}", help=edit_help):
-                    if is_curr_editing:
-                        st.session_state.editing_teacher_id = None
-                    else:
-                        st.session_state.editing_teacher_id = tid
-                        # Rimuovi TUTTI i vecchi stati temporanei e widget per questo docente
-                        for k in list(st.session_state.keys()):
-                            if k.endswith(f"_{tid}") or f"_{tid}_" in k or k.startswith(f"teacher_temp_assigns_{tid}"):
-                                del st.session_state[k]
-                    st.rerun()
-            with row_cols[5]:
-                if st.button("🗑️", key=f"del_btn_{tid}", help=f"Elimina {t.name}"):
-                    del problem.teachers[tid]
-                    problem.assignments = [a for a in problem.assignments if a.teacher_id != tid]
-                    if st.session_state.editing_teacher_id == tid:
-                        st.session_state.editing_teacher_id = None
-                    st.success(f"Docente eliminato!")
-                    st.rerun()
+            if is_settimana_corta:
+                row_cols = st.columns([3, 2, 3, 1, 1])
+                with row_cols[0]:
+                    doc_name_styled = f"👉 **{t.name}**{pt_badge} *(in modifica qui sotto 👇)*  \n📖 *{t_subjs_str}*  \n{classes_txt}" if is_curr_editing else f"**{t.name}**{pt_badge}  \n📖 *{t_subjs_str}*  \n{classes_txt}"
+                    st.markdown(doc_name_styled)
+                with row_cols[1]:
+                    st.markdown(contratto_label)
+                with row_cols[2]:
+                    st.caption(desiderata_str)
+                with row_cols[3]:
+                    edit_icon = "❌" if is_curr_editing else "✏️"
+                    edit_help = f"Chiudi modifica di {t.name}" if is_curr_editing else f"Modifica {t.name} direttamente qui sotto"
+                    if st.button(edit_icon, key=f"edit_btn_{tid}", help=edit_help):
+                        if is_curr_editing:
+                            st.session_state.editing_teacher_id = None
+                        else:
+                            st.session_state.editing_teacher_id = tid
+                        st.rerun()
+                with row_cols[4]:
+                    if st.button("🗑️", key=f"del_btn_{tid}", help=f"Elimina {t.name}"):
+                        del problem.teachers[tid]
+                        problem.assignments = [a for a in problem.assignments if a.teacher_id != tid]
+                        if st.session_state.editing_teacher_id == tid:
+                            st.session_state.editing_teacher_id = None
+                        st.success(f"Docente eliminato!")
+                        st.rerun()
+            else:
+                row_cols = st.columns([3, 2, 2, 2, 1, 1])
+                with row_cols[0]:
+                    doc_name_styled = f"👉 **{t.name}**{pt_badge} *(in modifica qui sotto 👇)*  \n📖 *{t_subjs_str}*  \n{classes_txt}" if is_curr_editing else f"**{t.name}**{pt_badge}  \n📖 *{t_subjs_str}*  \n{classes_txt}"
+                    st.markdown(doc_name_styled)
+                with row_cols[1]:
+                    st.markdown(contratto_label)
+                with row_cols[2]:
+                    st.write(giorno_libero_str)
+                with row_cols[3]:
+                    st.caption(desiderata_str)
+                with row_cols[4]:
+                    edit_icon = "❌" if is_curr_editing else "✏️"
+                    edit_help = f"Chiudi modifica di {t.name}" if is_curr_editing else f"Modifica {t.name} direttamente qui sotto"
+                    if st.button(edit_icon, key=f"edit_btn_{tid}", help=edit_help):
+                        if is_curr_editing:
+                            st.session_state.editing_teacher_id = None
+                        else:
+                            st.session_state.editing_teacher_id = tid
+                        st.rerun()
+                with row_cols[5]:
+                    if st.button("🗑️", key=f"del_btn_{tid}", help=f"Elimina {t.name}"):
+                        del problem.teachers[tid]
+                        problem.assignments = [a for a in problem.assignments if a.teacher_id != tid]
+                        if st.session_state.editing_teacher_id == tid:
+                            st.session_state.editing_teacher_id = None
+                        st.success(f"Docente eliminato!")
+                        st.rerun()
     
             # MODIFICA INLINE SUBITO SOTTO IL DOCENTE IN ELENCO
             if is_curr_editing:
@@ -3545,18 +3207,23 @@ with tabs[2]:
                             st.success("Tutte le materie e le cattedre sono state eliminate!")
                             st.rerun()
 
-    # SOTTOSCHEDA 3: AULE, LABORATORI & ASSEGNAZIONE DOCENTI
+    # -------------------------------------------------------------
+    # SOTTOSCHEDA 3: AULE, LABORATORI & PALESTRE
     # -------------------------------------------------------------
     with subtab_aule:
-        st.subheader("🏢 Gestione Aule, Laboratori & Assegnazione Docenti")
-        st.caption("Configura gli spazi della scuola (aule ordinarie, laboratori, palestre, aule DADA) e assegna specifici docenti alle loro aule dedicate.")
+        is_dada_on = getattr(problem.config, "is_dada", False)
+        title_spaces = "🏢 Aule DADA, Laboratori & Spazi" if is_dada_on else "🏢 Laboratori & Palestre"
+        btn_add_spaces = "➕ Nuova Aula DADA / Laboratorio / Spazio" if is_dada_on else "➕ Aggiungi Laboratorio / Palestra"
+        
+        st.subheader(title_spaces)
+        st.caption("Configura gli spazi della scuola (laboratori speciali, palestre, aule disciplinari DADA) e la loro capienza massima.")
         
         render_room_bottlenecks_resolver(problem, key_suffix="tab3_aule")
     
         if "editing_room_id" not in st.session_state:
             st.session_state.editing_room_id = None
     
-        with st.expander("➕ Nuova Aula / Laboratorio / Spazio Dedicato", expanded=False):
+        with st.expander(btn_add_spaces, expanded=False):
             render_room_edit_card(problem, target_r=None, is_inline=False)
     
         # Tabella & Riepilogo Aule Esistenti

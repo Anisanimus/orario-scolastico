@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup Orario Scolastico - Approfondimento PTOF Completo</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-light: #eff6ff;
+    --primary-border: #bfdbfe;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --bg-page: #f8fafc;
+    --bg-card: #ffffff;
+    --border-card: #e2e8f0;
+    --danger: #ef4444;
+    --danger-light: #fef2f2;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, sans-serif; }
+  body { background-color: var(--bg-page); color: var(--text-main); line-height: 1.5; padding: 24px; }
+  .app-container { max-width: 1100px; margin: 0 auto; }
+  
+  /* Header */
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border-card); }
+  .header h1 { font-size: 22px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 10px; }
+  .header .badge { background: #dcfce7; color: #166534; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
+  
+  /* Stepper Progress Bar */
+  .stepper { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 24px; }
+  .step-btn {
+    background: var(--bg-card);
+    border: 1.5px solid var(--border-card);
+    border-radius: var(--radius);
+    padding: 12px 10px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .step-btn:hover { border-color: var(--primary); }
+  .step-btn.active {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12);
+  }
+  .step-num { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+  .step-btn.active .step-num { color: var(--primary); }
+  .step-title { font-size: 13px; font-weight: 600; color: var(--text-main); }
+  
+  /* Main Content Layout */
+  .step-content { display: none; }
+  .step-content.active { display: block; }
+  
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  
+  /* Tooltip Indicator (i) */
+  .info-tip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: help;
+    position: relative;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+  .info-tip:hover { background: var(--primary); color: #fff; }
+  .info-tip:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 135%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 400;
+    padding: 8px 12px;
+    border-radius: 6px;
+    white-space: normal;
+    width: 260px;
+    line-height: 1.4;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+    z-index: 1000;
+    pointer-events: none;
+  }
+  
+  /* ACCORDION MODERNO CON TOGGLE NELL'HEADER */
+  .accordion-box {
+    background: #ffffff;
+    border: 1.5px solid var(--border-card);
+    border-radius: var(--radius);
+    margin-bottom: 14px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+  }
+  .accordion-box.active {
+    border-color: var(--primary-border);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+  }
+  .accordion-header {
+    padding: 14px 18px;
+    background: #ffffff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+  }
+  .accordion-header:hover { background: #f8fafc; }
+  .accordion-header-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .accordion-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .accordion-body {
+    padding: 16px 18px;
+    background: #f8fafc;
+    border-top: 1px solid var(--border-card);
+    display: none;
+  }
+  .accordion-box.active .accordion-body {
+    display: block;
+  }
+  
+  /* Form Controls */
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: #334155; }
+  .form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1.5px solid var(--border-card);
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+    outline: none;
+  }
+  .form-control:focus { border-color: var(--primary); }
+  
+  /* Toggle Switch */
+  .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .2s; border-radius: 24px; }
+  .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%; }
+  input:checked + .slider { background-color: var(--primary); }
+  input:checked + .slider:before { transform: translateX(20px); }
+  
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th { text-align: left; padding: 8px; border-bottom: 2px solid var(--border-card); color: var(--text-muted); font-size: 12px; }
+  td { padding: 8px; border-bottom: 1px solid #f1f5f9; }
+  
+  /* Buttons & Nav */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-secondary { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+  .btn-danger { background: var(--danger-light); color: var(--danger); border: 1px solid #fca5a5; }
+  .btn-sm { padding: 4px 8px; font-size: 12px; }
+  .icon-btn { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px 6px; cursor: pointer; font-size: 13px; }
+  .icon-btn:hover { background: #e2e8f0; }
+  .icon-btn.delete:hover { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
+  
+  .step-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-card); }
+  .inline-add-box { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+
+<div class="app-container">
+  
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <h1>📚 Orario Scolastico <span class="badge">Layout Completo & Approfondimento</span></h1>
+      <p style="color: var(--text-muted); font-size: 13px;">Tutte le opzioni incluse (DADA, Musicale, Prolungato, Approfondimento 1h PTOF) con switch nell'header.</p>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn btn-secondary" onclick="alert('Backup scaricato!')">📥 Scarica Excel Master</button>
+      <button class="btn btn-secondary" onclick="alert('Dataset demo caricato!')">⚡ Carica Demo</button>
+    </div>
+  </div>
+
+  <!-- Wizard Progression Stepper -->
+  <div class="stepper">
+    <div class="step-btn active" onclick="setStep(1)" id="step-btn-1">
+      <span class="step-num">Passo 1</span>
+      <span class="step-title">⚙️ 1. Struttura & PTOF</span>
+    </div>
+    <div class="step-btn" onclick="setStep(2)" id="step-btn-2">
+      <span class="step-num">Passo 2</span>
+      <span class="step-title">🏫 2. Classi & Aule</span>
+    </div>
+    <div class="step-btn" onclick="setStep(3)" id="step-btn-3">
+      <span class="step-num">Passo 3</span>
+      <span class="step-title">👥 3. Docenti & Cattedre</span>
+    </div>
+    <div class="step-btn" onclick="setStep(4)" id="step-btn-4">
+      <span class="step-num">Passo 4</span>
+      <span class="step-title">🔗 4. Blocchi 2h/3h & Paralleli</span>
+    </div>
+    <div class="step-btn" onclick="setStep(5)" id="step-btn-5">
+      <span class="step-num">Passo 5</span>
+      <span class="step-title">♿ 5. Sostegno / DVA</span>
+    </div>
+    <div class="step-btn" onclick="setStep(6)" id="step-btn-6">
+      <span class="step-num">Passo 6</span>
+      <span class="step-title">🚀 6. Genera Orario</span>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- STEP 1: STRUTTURA BASE & INDIRIZZI SPECIALI & APPROFONDIMENTO -->
+  <!-- ========================================================= -->
+  <div class="step-content active" id="step-1">
+    <div class="card">
+      <div class="card-title">
+        <span>📅 Scansione Oraria Settimanale Base (30 Ore)</span>
+        <span class="info-tip" data-tooltip="Definisce giorni di scuola (5 o 6 giorni) e ore antimeridiane base.">i</span>
+      </div>
+      <div style="display:grid; grid-template-columns: 1.2fr 2fr; gap:20px;">
+        <div class="form-group">
+          <label>Articolazione Settimanale</label>
+          <select class="form-control" id="school-days-select" onchange="onWeekDaysChanged(this.value)">
+            <option value="5" selected>Settimana Corta (5 Giorni: Lun-Ven, Sabato Chiuso)</option>
+            <option value="6">Settimana Lunga (6 Giorni: Lun-Sab con Giorno Libero)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Ore Antimeridiane di Base</label>
+          <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px;" id="hours-grid">
+            <div><label style="font-size:11px;">Lun</label><input class="form-control" type="number" value="6"></div>
+            <div><label style="font-size:11px;">Mar</label><input class="form-control" type="number" value="6"></div>
+            <div><label style="font-size:11px;">Mer</label><input class="form-control" type="number" value="6"></div>
+            <div><label style="font-size:11px;">Gio</label><input class="form-control" type="number" value="6"></div>
+            <div><label style="font-size:11px;">Ven</label><input class="form-control" type="number" value="6"></div>
+            <div id="sat-hour-col" style="opacity:0.3;"><label style="font-size:11px;">Sab</label><input class="form-control" type="number" value="0" disabled></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCORDION DADA -->
+    <div class="accordion-box" id="box-dada">
+      <div class="accordion-header">
+        <div class="accordion-header-title">
+          <span>🏫 Modello Didattico DADA (Aule per Disciplina)</span>
+          <span class="info-tip" data-tooltip="Attiva la rotazione tra le aule assegnate ai dipartimenti.">i</span>
+        </div>
+        <div class="accordion-header-controls" onclick="event.stopPropagation();">
+          <label class="switch"><input type="checkbox" onchange="onDadaToggle(this.checked)"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="accordion-body">
+        <label style="font-size:12px; font-weight:600;">Politica Spostamento Studenti</label>
+        <select class="form-control" style="margin-top:4px;"><option>🟢 Tolleranza Flessibile</option><option>🔒 Blocchi Rigidi 1-2, 3-4, 5-6</option></select>
+      </div>
+    </div>
+
+    <!-- ACCORDION ORA DI APPROFONDIMENTO PTOF (1 ORA DPR 89/2009) -->
+    <div class="accordion-box active" id="box-app">
+      <div class="accordion-header">
+        <div class="accordion-header-title">
+          <span>🎯 Ora di Approfondimento PTOF (1h Quota Autonomia DPR 89/2009)</span>
+          <span class="info-tip" data-tooltip="Configura l'utilizzo della 30ª ora di approfondimento: potenziamento materia tradizionale o laboratorio dedicato (es. Teatro, Coding).">i</span>
+        </div>
+        <div class="accordion-header-controls" onclick="event.stopPropagation();">
+          <label class="switch"><input type="checkbox" checked onchange="toggleAccordionBox('box-app', this.checked)"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="accordion-body">
+        <div class="form-group">
+          <label>Tipologia Ora di Approfondimento</label>
+          <select class="form-control" id="sel-app-type" onchange="onAppTypeChange(this.value)">
+            <option value="subject">Potenziamento Materia Tradizionale (+1h a Italiano, Matematica, Scienze o Lingue)</option>
+            <option value="custom" selected>🎭 Attività / Laboratorio Dedicato PTOF (es. Laboratorio di Teatro, Coding, Robotica)</option>
+          </select>
+        </div>
+
+        <!-- SOTTO-PANNELLO POTENZIAMENTO MATERIA TRADIZIONALE -->
+        <div id="panel-app-subject" style="display:none;">
+          <div class="form-group">
+            <label>Materia da potenziare (+1h settimanale)</label>
+            <select class="form-control">
+              <option>✍️ Italiano / Lettere (Italiano passa da 5h a 6h -> Totale Lettere 10h)</option>
+              <option>📐 Matematica (Matematica passa da 4h a 5h)</option>
+              <option>🔬 Scienze Sperimentali (Scienze passa da 2h a 3h)</option>
+              <option>🇬🇧 Potenziamento Inglese (Inglese passa da 3h a 4h)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- SOTTO-PANNELLO LABORATORIO PTOF (TEATRO / CODING) -->
+        <div id="panel-app-custom">
+          <div style="display:grid; grid-template-columns: 1.5fr 1fr 1fr; gap:12px; margin-bottom:10px;">
+            <div class="form-group">
+              <label>Nome Attività PTOF</label>
+              <input class="form-control" value="Laboratorio di Teatro" placeholder="es. Laboratorio di Teatro">
+            </div>
+            <div class="form-group">
+              <label>Classe di Concorso (CdC)</label>
+              <select class="form-control">
+                <option>A-22 (Lettere)</option>
+                <option>A-28 (Mat/Scienze)</option>
+                <option>A-60 (Tecnologia)</option>
+                <option>A-30 (Musica)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Spazio Dedicato Creato</label>
+              <input class="form-control" value="Spazio Teatro (2 Aule)" readonly>
+            </div>
+          </div>
+          
+          <div style="background:#fff; border:1px solid #e2e8f0; padding:10px; border-radius:6px;">
+            <label style="font-size:12px; font-weight:600; display:block; margin-bottom:4px;">⚖️ Compensazione Oraria CdC Lettere (A-22):</label>
+            <select class="form-control" style="font-size:12.5px;">
+              <option>✍️ Togli a Italiano (Italiano passa da 6h a 5h + 1h Teatro -> Totale Lettere resta 10h)</option>
+              <option>📜 Togli a Storia (Storia passa da 2h a 1h + 1h Teatro -> Totale Lettere resta 10h)</option>
+              <option>➕ Nessuna (Ora aggiuntiva PTOF: 11h totali)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCORDION MUSICALE -->
+    <div class="accordion-box active" id="box-mus">
+      <div class="accordion-header">
+        <div class="accordion-header-title">
+          <span>🎼 Indirizzo Musicale (32 Ore - con Rientro e Mensa)</span>
+          <span class="info-tip" data-tooltip="Attiva la sezione a 32h con orchestra e rientro pomeridiano.">i</span>
+        </div>
+        <div class="accordion-header-controls" onclick="event.stopPropagation();">
+          <label class="switch"><input type="checkbox" checked onchange="toggleAccordionBox('box-mus', this.checked)"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="accordion-body">
+        <div style="display:grid; grid-template-columns: 1fr 1fr 2fr; gap:12px;">
+          <div class="form-group"><label>Sezione Musicale</label><select class="form-control"><option>Sezione F</option></select></div>
+          <div class="form-group"><label>Docenti Compresenti</label><select class="form-control"><option>4 Docenti (A-56)</option></select></div>
+          <div class="form-group"><label>Strumenti Attivi</label><input class="form-control" value="Flauto, Violino, Chitarra, Clarinetto"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCORDION PROLUNGATO -->
+    <div class="accordion-box" id="box-ext">
+      <div class="accordion-header">
+        <div class="accordion-header-title">
+          <span>🕒 Tempo Prolungato (36 Ore - con 2 Rientri e Mensa)</span>
+          <span class="info-tip" data-tooltip="Attiva le sezioni a tempo prolungato (36h).">i</span>
+        </div>
+        <div class="accordion-header-controls" onclick="event.stopPropagation();">
+          <label class="switch"><input type="checkbox" onchange="toggleAccordionBox('box-ext', this.checked)"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="accordion-body">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-group"><label>Sezione Prolungato</label><select class="form-control"><option>Sezione D</option></select></div>
+          <div class="form-group"><label>Mensa</label><select class="form-control"><option>🍝 60 minuti</option></select></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-nav">
+      <div></div>
+      <button class="btn btn-primary" onclick="setStep(2)">Avanti: Classi & Aule ➔</button>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- STEP 2: CLASSI & AULE -->
+  <!-- ========================================================= -->
+  <div class="step-content" id="step-2">
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">
+          <span>🏫 Classi & Sezioni (18 Classi)</span>
+          <span class="info-tip" data-tooltip="Aggiungi o elimina classi.">i</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:12px;">
+          <button class="btn btn-primary btn-sm" onclick="toggleAddForm('add-class-form')">➕ Aggiungi Nuova Classe</button>
+          <button class="btn btn-danger btn-sm" onclick="alert('Classi svuotate')">🗑️ Svuota Tutte</button>
+        </div>
+        <div id="add-class-form" class="inline-add-box" style="display:none;">
+          <div style="display:grid; grid-template-columns: 1fr 1fr 1.5fr; gap:8px; margin-bottom:8px;">
+            <div><label style="font-size:11px;">Anno</label><select class="form-control"><option>1ª</option><option>2ª</option><option>3ª</option></select></div>
+            <div><label style="font-size:11px;">Sezione</label><input class="form-control" placeholder="G"></div>
+            <div><label style="font-size:11px;">Indirizzo</label><select class="form-control"><option>Ordinario (30h)</option></select></div>
+          </div>
+          <div style="text-align:right;"><button class="btn btn-primary btn-sm" onclick="toggleAddForm('add-class-form')">💾 Salva</button></div>
+        </div>
+        <table>
+          <thead><tr><th>Classe</th><th>Indirizzo</th><th>Ore/Sett</th><th style="text-align:right;">Azioni</th></tr></thead>
+          <tbody>
+            <tr><td><strong>1ª A</strong></td><td>Ordinario (30h)</td><td>30h</td><td style="text-align:right;"><button class="icon-btn">✏️</button> <button class="icon-btn delete">🗑️</button></td></tr>
+            <tr><td><strong>1ª F</strong></td><td>🎼 Musicale (32h)</td><td>32h</td><td style="text-align:right;"><button class="icon-btn">✏️</button> <button class="icon-btn delete">🗑️</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span id="title-spazi-box">🏢 Laboratori & Palestre</span>
+          <span class="info-tip" data-tooltip="Palestre e Laboratori speciali.">i</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:12px;">
+          <button class="btn btn-primary btn-sm" id="btn-add-spazio" onclick="toggleAddForm('add-room-form')">➕ Aggiungi Laboratorio / Palestra</button>
+          <button class="btn btn-danger btn-sm" onclick="alert('Spazi svuotati')">🗑️ Svuota Tutte</button>
+        </div>
+        <div id="add-room-form" class="inline-add-box" style="display:none;">
+          <div style="display:grid; grid-template-columns: 2fr 1fr; gap:8px; margin-bottom:8px;">
+            <div><label style="font-size:11px;">Nome Spazio</label><input class="form-control" placeholder="Lab STEM"></div>
+            <div><label style="font-size:11px;">Capienza</label><input class="form-control" type="number" value="1"></div>
+          </div>
+          <div style="text-align:right;"><button class="btn btn-primary btn-sm" onclick="toggleAddForm('add-room-form')">💾 Salva</button></div>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label style="font-size:12px; font-weight:600;">Capienza Palestra Principale</label>
+          <select class="form-control" style="padding:6px 10px; font-size:13px;">
+            <option>1 Palestra Condivisa (Capienza: 2 classi in contemporanea)</option>
+            <option>1 Palestra Singola (Capienza: 1 classe alla volta)</option>
+          </select>
+        </div>
+        <table>
+          <thead><tr><th>Spazio / Palestra</th><th>Materia</th><th>Capienza Max</th><th style="text-align:right;">Azioni</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Palestra Bebe Vio</strong></td><td>Scienze Motorie</td><td>2 Classi</td><td style="text-align:right;"><button class="icon-btn">✏️</button> <button class="icon-btn delete">🗑️</button></td></tr>
+            <tr><td><strong>Auditorium</strong></td><td>Orchestra / Musica</td><td>1 Classe</td><td style="text-align:right;"><button class="icon-btn">✏️</button> <button class="icon-btn delete">🗑️</button></td></tr>
+            <tr><td><strong>Spazio Teatro 1 & 2</strong></td><td>Lab. Teatro PTOF</td><td>1 Classe cad.</td><td style="text-align:right;"><button class="icon-btn">✏️</button> <button class="icon-btn delete">🗑️</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="step-nav">
+      <button class="btn btn-secondary" onclick="setStep(1)">⬅️ Indietro</button>
+      <button class="btn btn-primary" onclick="setStep(3)">Avanti: Docenti & Cattedre ➔</button>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- STEP 3: DOCENTI & CATTEDRE -->
+  <!-- ========================================================= -->
+  <div class="step-content" id="step-3">
+    <div class="card">
+      <div class="card-title">
+        <span>👥 Elenco Docenti & Cattedre Assegnate</span>
+        <span class="info-tip" data-tooltip="Docenti con cattedre e materie.">i</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; gap:10px; margin-bottom:14px;">
+        <input class="form-control" style="flex:2;" placeholder="🔍 Cerca docente o materia...">
+        <button class="btn btn-primary btn-sm">➕ Nuovo Docente</button>
+        <button class="btn btn-secondary btn-sm">📥 Importa da Excel</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Docente</th>
+            <th>Materia</th>
+            <th>Contratto</th>
+            <th>Ore Assegnate</th>
+            <th id="th-giorno-libero" style="display:none;">Giorno Libero</th>
+            <th>Desiderata / Vincoli</th>
+            <th style="text-align:right;">Azioni</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Prof. Mariani A.</strong></td>
+            <td>Tecnologia</td>
+            <td>Tempo Pieno (18h)</td>
+            <td>18h (9 Classi)</td>
+            <td class="td-giorno-libero" style="display:none;"><select class="form-control" style="padding:2px 4px;"><option>Mercoledì</option></select></td>
+            <td>Nessun vincolo</td>
+            <td style="text-align:right;"><button class="icon-btn">✏️</button> <button class="icon-btn delete">🗑️</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="step-nav">
+      <button class="btn btn-secondary" onclick="setStep(2)">⬅️ Indietro</button>
+      <button class="btn btn-primary" onclick="setStep(4)">Avanti: Blocchi 2h/3h & Paralleli ➔</button>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- STEP 4: VINCOLI, COPPIE FORZATE & PARALLELISMI -->
+  <!-- ========================================================= -->
+  <div class="step-content" id="step-4">
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">
+          <span>🔗 Blocchi Orari Consecutivi per Materia</span>
+          <span class="info-tip" data-tooltip="Configura blocchi da 2 o 3 ore per materia.">i</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <span style="font-size:12px; color:var(--text-muted);">Imposta forzatura oraria:</span>
+          <button class="btn btn-primary btn-sm" onclick="toggleAddForm('add-block-subject-form')">➕ Aggiungi Vincolo Materia</button>
+        </div>
+        <div id="add-block-subject-form" class="inline-add-box" style="display:none;">
+          <div style="display:grid; grid-template-columns: 2fr 1.5fr; gap:8px; margin-bottom:8px;">
+            <div><label style="font-size:11px;">Materia</label><select class="form-control"><option>Arte e Immagine</option><option>Matematica</option></select></div>
+            <div><label style="font-size:11px;">Formato</label><select class="form-control"><option>🔒 2 Ore Consecutive</option><option>🔒 3 Ore Consecutive</option></select></div>
+          </div>
+          <div style="text-align:right;"><button class="btn btn-primary btn-sm" onclick="toggleAddForm('add-block-subject-form')">💾 Salva</button></div>
+        </div>
+        <table>
+          <thead><tr><th>Materia</th><th>Formato Blocco</th><th style="text-align:right;">Stato</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Scienze Motorie</strong></td><td><select class="form-control" style="padding:4px;"><option>🔒 2h Consecutive</option></select></td><td style="text-align:right;"><label class="switch"><input type="checkbox" checked><span class="slider"></span></label></td></tr>
+            <tr><td><strong>Italiano (Lettere)</strong></td><td><select class="form-control" style="padding:4px;"><option>🔒 Blocchi da 2 Ore</option><option>🔒 Blocco da 3 Ore</option></select></td><td style="text-align:right;"><label class="switch"><input type="checkbox" checked><span class="slider"></span></label></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span>👤 Blocchi 2h / 3h per Singolo Docente</span>
+          <span class="info-tip" data-tooltip="Forza blocchi su un docente.">i</span>
+        </div>
+        <select class="form-control"><option>👤 Prof. Mariani A. (Tecnologia)</option></select>
+        <button class="btn btn-secondary" style="width:100%; margin:10px 0;">⚡ Forza Blocchi 2h su Tutte le Cattedre</button>
+      </div>
+    </div>
+
+    <div class="accordion-box active" id="box-par">
+      <div class="accordion-header">
+        <div class="accordion-header-title">
+          <span>👥 Classi Aperte & Parallelismi Didattici (Ore Sincronizzate)</span>
+          <span class="info-tip" data-tooltip="Configura parallelismi orari.">i</span>
+        </div>
+        <div class="accordion-header-controls" onclick="event.stopPropagation();">
+          <label class="switch"><input type="checkbox" checked onchange="toggleAccordionBox('box-par', this.checked)"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="accordion-body">
+        <table>
+          <thead><tr><th>Regola</th><th>Materia</th><th>Classi</th><th>Ore</th><th>Spazio</th><th>Stato</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Scienze Motorie 3A + 3B</strong></td><td>Scienze Motorie</td><td>3A, 3B</td><td>2h</td><td>Palestra Bebe Vio</td><td><span style="color:var(--primary); font-weight:600;">🟢 Attiva</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-secondary" onclick="setStep(3)">⬅️ Indietro</button>
+      <button class="btn btn-primary" onclick="setStep(5)">Avanti: Sostegno / DVA ➔</button>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- STEP 5: SOSTEGNO & DVA -->
+  <!-- ========================================================= -->
+  <div class="step-content" id="step-5">
+    <div class="card">
+      <div class="card-title">
+        <span>♿ Alunni DVA & Copertura Sostegno</span>
+        <span class="info-tip" data-tooltip="Configura alunni PEI.">i</span>
+      </div>
+      <table>
+        <thead><tr><th>Alunno</th><th>Classe</th><th>Ore PEI</th><th>Docente Sostegno</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Alunno 1A-1</strong></td><td>1ª A</td><td>18h</td><td>Prof. Gentile (Sostegno)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="step-nav">
+      <button class="btn btn-secondary" onclick="setStep(4)">⬅️ Indietro</button>
+      <button class="btn btn-primary" onclick="setStep(6)">Avanti: Generazione Orario ➔</button>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- STEP 6: QUADRATURA & GENERA ORARIO -->
+  <!-- ========================================================= -->
+  <div class="step-content" id="step-6">
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">
+          <span>📊 Quadratura & Controllo Preventivo</span>
+          <span class="info-tip" data-tooltip="Riepilogo.">i</span>
+        </div>
+        <p style="font-size:13px; color:#166534; font-weight:600;">✅ 18/18 Classi Quadrate al 100%</p>
+      </div>
+
+      <div class="card" style="text-align:center;">
+        <h2 style="font-size:18px; font-weight:700; margin-bottom:8px;">🚀 Generazione Orario con CP-SAT</h2>
+        <button class="btn btn-primary" style="font-size:15px; padding:12px 24px; width:100%; justify-content:center;" onclick="alert('Risolutore CP-SAT avviato!')">⚡ GENERA ORARIO SCOLASTICO</button>
+      </div>
+    </div>
+    <div class="step-nav">
+      <button class="btn btn-secondary" onclick="setStep(5)">⬅️ Indietro</button>
+      <div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let isDadaActive = false;
+
+  function setStep(stepNum) {
+    for (let i = 1; i <= 6; i++) {
+      const stepEl = document.getElementById('step-' + i);
+      const btnEl = document.getElementById('step-btn-' + i);
+      if (stepEl) stepEl.classList.remove('active');
+      if (btnEl) btnEl.classList.remove('active');
+    }
+    document.getElementById('step-' + stepNum).classList.add('active');
+    document.getElementById('step-btn-' + stepNum).classList.add('active');
+  }
+
+  function toggleAccordionBox(boxId, isChecked) {
+    const box = document.getElementById(boxId);
+    if (box) {
+      if (isChecked) {
+        box.classList.add('active');
+      } else {
+        box.classList.remove('active');
+      }
+    }
+  }
+
+  function onDadaToggle(isChecked) {
+    isDadaActive = isChecked;
+    toggleAccordionBox('box-dada', isChecked);
+    updateSpaziTitle();
+  }
+
+  function updateSpaziTitle() {
+    const titleEl = document.getElementById('title-spazi-box');
+    const btnAdd = document.getElementById('btn-add-spazio');
+    if (titleEl) {
+      titleEl.innerHTML = isDadaActive ? "🏢 Aule DADA, Laboratori & Spazi" : "🏢 Laboratori & Palestre";
+    }
+    if (btnAdd) {
+      btnAdd.innerHTML = isDadaActive ? "➕ Aggiungi Spazio / Aula DADA" : "➕ Aggiungi Laboratorio / Palestra";
+    }
+  }
+
+  function onAppTypeChange(val) {
+    const panelSubj = document.getElementById('panel-app-subject');
+    const panelCust = document.getElementById('panel-app-custom');
+    if (val === 'subject') {
+      panelSubj.style.display = 'block';
+      panelCust.style.display = 'none';
+    } else {
+      panelSubj.style.display = 'none';
+      panelCust.style.display = 'block';
+    }
+  }
+
+  function toggleAddForm(formId) {
+    const el = document.getElementById(formId);
+    if (el) {
+      el.style.display = (el.style.display === 'none' || el.style.display === '') ? 'block' : 'none';
+    }
+  }
+
+  function onWeekDaysChanged(val) {
+    const is6Days = (val === '6');
+    const satCol = document.getElementById('sat-hour-col');
+    if (satCol) {
+      satCol.style.opacity = is6Days ? '1' : '0.3';
+      satCol.querySelector('input').disabled = !is6Days;
+      if (is6Days && satCol.querySelector('input').value == '0') satCol.querySelector('input').value = '5';
+    }
+
+    const thGiorno = document.getElementById('th-giorno-libero');
+    const tdGiorni = document.querySelectorAll('.td-giorno-libero');
+
+    if (thGiorno) thGiorno.style.display = is6Days ? '' : 'none';
+    tdGiorni.forEach(el => el.style.display = is6Days ? '' : 'none');
+  }
+
+  updateSpaziTitle();
+</script>
+
+</body>
+</html>
