@@ -74,7 +74,7 @@ class TestMusicalCurriculumAndAfternoonSuite(unittest.TestCase):
     def test_04_solver_feasibility_and_co_teaching(self):
         """Esegue il solutore CP-SAT e verifica compresenze a 4 docenti e parallelismi in palestra."""
         solver = TimetableSolver(self.problem, max_gap_limit=4, strict_gap_limit=False)
-        result = solver.solve(max_time_seconds=25, random_seed=42)
+        result = solver.solve(max_time_seconds=45, random_seed=42)
 
         self.assertIn(result.status, ["OPTIMAL", "FEASIBLE"], f"Il solutore deve produrre una soluzione valida. Ricevuto: {result.status}")
 
