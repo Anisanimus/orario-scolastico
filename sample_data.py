@@ -174,14 +174,12 @@ def get_sample_problem(
         afternoons = []
         lunch_m = 60
 
-        # Corso F: Indirizzo Musicale (32h con rientri pomeridiani personalizzati)
+        # Corso F: Indirizzo Musicale (32h con rientro al Lunedì)
         if sec_letter == "F" and with_musical_curriculum:
             curriculum = "musicale"
             target_h = 32
-            # Esempio: 1F al Lunedì, 2F al Martedì, 3F al Mercoledì oppure personalizzabili
-            mus_afternoon_map = {1: ["Lunedì"], 2: ["Martedì"], 3: ["Mercoledì"]}
-            afternoons = mus_afternoon_map.get(grade_idx, ["Lunedì"])
-            lunch_m = 60
+            afternoons = ["Lunedì"]
+            lunch_m = 0 if grade_idx == 1 else 60
 
         # Corso E: Tempo Prolungato (36h con 2 pomeriggi)
         elif sec_letter == "E" and with_extended_curriculum:
@@ -678,17 +676,17 @@ def get_sample_problem(
             
             instrument_co_teachers = ["doc_str_clarinetto", "doc_str_flauto", "doc_str_chitarra"]
             
-            # Mappa slot reali fissati:
-            # 1F: Lunedì 2ª ora, Mercoledì 4ª ora
-            # 2F: Lunedì 3ª ora, Mercoledì 2ª ora
-            # 3F: Lunedì 4ª ora, Mercoledì 3ª ora
+            # Mappa slot reali fissati (Lunedì pomeriggio + Mercoledì mattino):
+            # 1F: Lunedì 7ª ora (h=6), Mercoledì 4ª ora (h=3)
+            # 2F: Lunedì 8ª ora (h=7), Mercoledì 2ª ora (h=1)
+            # 3F: Lunedì 9ª ora (h=8), Mercoledì 3ª ora (h=2)
             class_slots_preset = {
-                "1F": [[0, 1], [2, 3]],
-                "2F": [[0, 2], [2, 1]],
-                "3F": [[0, 3], [2, 2]],
-                "1f": [[0, 1], [2, 3]],
-                "2f": [[0, 2], [2, 1]],
-                "3f": [[0, 3], [2, 2]],
+                "1F": [[0, 6], [2, 3]],
+                "2F": [[0, 7], [2, 1]],
+                "3F": [[0, 8], [2, 2]],
+                "1f": [[0, 6], [2, 3]],
+                "2f": [[0, 7], [2, 1]],
+                "3f": [[0, 8], [2, 2]],
             }
             
             # Assegnazione Orchestra (Musica d'Insieme / Teoria) con i 4 docenti compresenti al mattino

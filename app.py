@@ -2830,11 +2830,11 @@ with tabs[0]:
 
                     st.markdown("---")
                     st.markdown("##### 📌 Fissaggio Esatto Slot Orari Compresenza (Orchestra & Solfeggio):")
-                    # Mappa di default realistica senza conflitti docente (Lunedì e Mercoledì mattino)
+                    # Mappa di default realistica senza conflitti docente (Lunedì pomeriggio + Mercoledì mattino)
                     default_pin_schedule = {
-                        1: {"d1": 0, "h1": 1, "d2": 2, "h2": 3}, # 1F: Lun 2ª ora, Mer 4ª ora
-                        2: {"d1": 0, "h1": 2, "d2": 2, "h2": 1}, # 2F: Lun 3ª ora, Mer 2ª ora
-                        3: {"d1": 0, "h1": 3, "d2": 2, "h2": 2}, # 3F: Lun 4ª ora, Mer 3ª ora
+                        1: {"d1": 0, "h1": 6, "d2": 2, "h2": 3}, # 1F: Lun 7ª ora (h=6), Mer 4ª ora (h=3)
+                        2: {"d1": 0, "h1": 7, "d2": 2, "h2": 1}, # 2F: Lun 8ª ora (h=7), Mer 2ª ora (h=1)
+                        3: {"d1": 0, "h1": 8, "d2": 2, "h2": 2}, # 3F: Lun 9ª ora (h=8), Mer 3ª ora (h=2)
                     }
                     
                     for mus_c in mus_classes_list:
