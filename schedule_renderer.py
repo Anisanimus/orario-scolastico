@@ -29,30 +29,36 @@ def render_html_schedule_table(
         <tbody>
     """
     for h in range(max_h):
-        # Riga separatore visiva della Pausa Mensa tra il mattino (ore 1-6) e il pomeriggio (ore 7-8)
-        if h == 6 and max_h > 6:
-            html += """
-            <tr style="background: #fffbeb; border-top: 2px solid #fef3c7; border-bottom: 2px solid #fef3c7;">
-              <td style="padding: 6px 4px; text-align: center; font-weight: 800; color: #b45309; font-size: 11.5px; border-right: 1px solid #fde68a;">🍝 MENSA</td>
-            """
-            for d_idx, day_name in enumerate(days_active):
+        # 1ª-6ª Ora: Mattino
+        # 7ª Ora: Pausa Mensa
+        # 8ª-9ª Ora: Pomeriggio / Rientro
+        if h == 6:
+            ora_label = "🍝 7ª (Mensa)"
+        elif h == 7:
+            ora_label = "🌇 8ª (Rientro)"
+        elif h == 8:
+            ora_label = "🌇 9ª (Rientro)"
+        else:
+            ora_label = f"{h+1}ª Ora"
+
+        html += f"""
+          <tr style="border-bottom: 1px solid #f1f5f9; {'background: #fffbeb;' if h == 6 else ('background: #f0fdf4;' if h > 6 else '')}">
+            <td style="padding: 10px 4px; text-align: center; font-weight: 700; color: {'#b45309' if h == 6 else ('#0369a1' if h > 6 else '#64748b')}; background: {'#fef3c7' if h == 6 else ('#f0f9ff' if h > 6 else '#f8fafc')}; font-size: 11.5px; border-right: 1px solid #e2e8f0;">{ora_label}</td>
+        """
+        for d_idx, day_name in enumerate(days_active):
+            # Se siamo allo slot della mensa (h=6)
+            if h == 6:
                 has_aft = daily_hours[d_idx] > 6
                 if has_aft:
                     html += """
                     <td style="padding: 6px 8px; text-align: center; background: #fffbeb; border-right: 1px solid #fde68a;">
-                      <div style="display: inline-block; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 4px; padding: 2px 10px; font-size: 11px; font-weight: 700;">🍝 Pausa Mensa / Intervallo</div>
+                      <div style="display: inline-block; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: 700;">🍝 Pausa Mensa / Intervallo</div>
                     </td>
                     """
                 else:
                     html += """<td style="background: #f8fafc; border-right: 1px solid #f1f5f9;"></td>"""
-            html += """</tr>"""
+                continue
 
-        ora_label = f"{h+1}ª Ora" if h < 6 else f"🌇 {h+1}ª Ora (Rientro)"
-        html += f"""
-          <tr style="border-bottom: 1px solid #f1f5f9; {'background: #fafafa;' if h >= 6 else ''}">
-            <td style="padding: 10px 4px; text-align: center; font-weight: 700; color: {'#0369a1' if h >= 6 else '#64748b'}; background: {'#f0f9ff' if h >= 6 else '#f8fafc'}; font-size: 11.5px; border-right: 1px solid #e2e8f0;">{ora_label}</td>
-        """
-        for d_idx, day_name in enumerate(days_active):
             if h >= daily_hours[d_idx]:
                 html += """<td style="background: #f8fafc; border-right: 1px solid #f1f5f9;"></td>"""
                 continue
