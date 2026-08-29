@@ -2385,8 +2385,8 @@ with tabs[0]:
 
     st.divider()
     tot_weekly_h = sum(problem.config.daily_hours[:num_days])
-    st.subheader("⏱️ Ore di Lezione Giornaliere")
-    st.caption(f"Imposta le ore di lezione di ciascun giorno con le freccette. Totale attuale: **{tot_weekly_h} ore settimanali per classe** {'(Quadro orario standard 30h esatte ✅)' if tot_weekly_h == 30 else ''}.")
+    st.subheader("⏱️ Ore di Lezione Giornaliere di Base (Tempo Normale - 30h)")
+    st.caption(f"Imposta le ore di lezione antimeridiane base per il **Tempo Normale** (totale: **{tot_weekly_h}h/settimana**). *(Nota: per il **Tempo Musicale a 32h** e il **Tempo Prolungato a 36h**, il sistema aggiunge automaticamente nei giorni di rientro la **Pausa Mensa** e le **2 ore pomeridiane**, strutturando la giornata in **6h mattino ➔ Mensa ➔ 2h pomeriggio**)*.")
     
     # Pulsanti di preset rapido
     q_col1, q_col2, _ = st.columns([1.2, 1.2, 3])
