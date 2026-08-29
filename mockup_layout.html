@@ -221,8 +221,8 @@
       <p style="color: var(--text-muted); font-size: 13px;">Tutte le opzioni incluse (DADA, Musicale, Prolungato, Approfondimento 1h PTOF) con switch nell'header.</p>
     </div>
     <div style="display:flex; gap:8px;">
-      <button class="btn btn-secondary" onclick="alert('Backup completo scaricato con successo!')">📥 Scarica Excel Master</button>
-      <button class="btn btn-secondary" onclick="loadScenarioDemo('standard')">⚡ Carica Demo</button>
+      <a class="btn btn-secondary" href="/api/download_master_excel" download style="text-decoration:none;">📥 Scarica Excel Master</a>
+      <button class="btn btn-secondary" onclick="loadScenarioDemo('standard')">⚡ Carica Demo (18 Classi)</button>
     </div>
   </div>
 
@@ -807,7 +807,37 @@
       const res = await fetch('/api/state');
       const data = await res.json();
       console.log('App state synced:', data);
-    } catch(e) {}
+
+      // 1. Popola tabella Classi nel Passo 2
+      const tbClasses = document.querySelector('#step-2 table tbody');
+      if (tbClasses && data.classes) {
+        tbClasses.innerHTML = '';
+        data.classes.forEach(c => {
+          const tr = document.createElement('tr');
+          const badge = (c.curriculum_type === 'musicale') ? '🎼 Musicale (32h)' : ((c.curriculum_type === 'prolungato') ? '🕒 Prolungato (36h)' : 'Ordinario (30h)');
+          tr.innerHTML = `<td><strong>${c.name}</strong></td><td>${badge}</td><td>${c.weekly_hours_target}h</td><td style="text-align:right;"><button class="icon-btn">✏️</button> <button class="icon-btn delete">🗑️</button></td>`;
+          tbClasses.appendChild(tr);
+        });
+      }
+
+      // 2. Popola tabella Docenti nel Passo 3
+      const tbTeachers = document.querySelector('#step-3 table tbody');
+      if (tbTeachers && data.teachers) {
+        tbTeachers.innerHTML = '';
+        data.teachers.forEach(t => {
+          const tr = document.createElement('tr');
+          const contr = t.is_part_time ? `Part-Time (${t.contract_hours}h)` : `Tempo Pieno (${t.contract_hours}h)`;
+          const daysMap = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato"];
+          const freeDayTxt = daysMap[t.free_day] || "Lunedì";
+          const is6D = (data.config.num_days === 6);
+          const tdFreeDisplay = is6D ? '' : 'style="display:none;"';
+          tr.innerHTML = `<td><strong>${t.name}</strong></td><td>${t.subject.toUpperCase()}</td><td>${contr}</td><td>${t.hours_assigned}h</td><td class="td-giorno-libero" ${tdFreeDisplay}>${freeDayTxt}</td><td>Regolare</td><td style="text-align:right;"><button class="icon-btn">✏️</button> <button class="icon-btn delete">🗑️</button></td>`;
+          tbTeachers.appendChild(tr);
+        });
+      }
+    } catch(e) {
+      console.error(e);
+    }
   }
 
   let timetableData = null;

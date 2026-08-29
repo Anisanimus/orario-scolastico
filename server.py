@@ -15,6 +15,7 @@ from models import (
 from sample_data import get_sample_problem, get_empty_problem
 from solver import TimetableSolver, TimetableResult
 from exporters import generate_excel_timetable, generate_excel_tabellone_combo
+from importers import generate_unified_school_excel
 
 PORT = 8080
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
@@ -31,6 +32,15 @@ class AppServer(http.server.SimpleHTTPRequestHandler):
         if parsed.path == "/" or parsed.path == "/index.html":
             self.path = "/mockup_layout.html"
             return super().do_GET()
+
+        if parsed.path == "/api/download_master_excel":
+            excel_bytes = generate_unified_school_excel(current_problem)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            self.send_header("Content-Disposition", f"attachment; filename=Backup_Scuola_{current_problem.config.school_name.replace(' ', '_')}.xlsx")
+            self.end_headers()
+            self.wfile.write(excel_bytes)
+            return
             
         if parsed.path == "/api/state":
             self.send_response(200)
