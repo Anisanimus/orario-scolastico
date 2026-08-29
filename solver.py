@@ -668,15 +668,21 @@ class TimetableSolver:
 
             for d in range(num_days):
                 for h in range(daily_hours[d]):
-                    slot_room_terms = [self.x[a_id, d, h] for a_id in stand_alone_room_assigns]
+                    # In qualunque ora (d, h), lo spazio speciale/palestra può essere occupato da:
+                    # - 1 gruppo parallelo autorizzato (es. 3ªA+3ªB), OPPURE
+                    # - 1 singola classe ordinaria (stand-alone)
+                    # MAI due classi ordinarie insieme, e MAI una classe ordinaria insieme a un gruppo parallelo!
+                    pg_active_indicators = []
                     for grp, g_a_ids in pg_in_room:
                         p_vars_dict = self.parallel_group_slot_vars.get(grp.id)
                         if p_vars_dict and (d, h) in p_vars_dict:
-                            p_v = p_vars_dict[d, h]
-                            slot_room_terms.append(sum(self.x[aid, d, h] for aid in g_a_ids) - (len(g_a_ids) - 1) * p_v)
+                            pg_active_indicators.append(p_vars_dict[d, h])
                         else:
-                            slot_room_terms.append(self.x[g_a_ids[0], d, h])
-                    m.Add(sum(slot_room_terms) <= total_cap)
+                            pg_active_indicators.append(self.x[g_a_ids[0], d, h])
+                    
+                    # Ciascun gruppo parallelo vale 1 'occupazione di palestra' e ogni classe stand-alone vale 1 'occupazione'
+                    # Il totale delle occupazioni indipendenti non può superare 1!
+                    m.Add(sum(self.x[a_id, d, h] for a_id in stand_alone_room_assigns) + sum(pg_active_indicators) <= 1)
 
         # 9. VINCOLO DIDATTICO RIGIDO: Max ore al giorno per materia in una classe
         for a in prob.assignments:
