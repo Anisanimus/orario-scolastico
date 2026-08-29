@@ -999,6 +999,11 @@ def get_sample_problem(
         for i in range(0, len(third_grade_classes), 2):
             pair_c = third_grade_classes[i:i+2]
             if len(pair_c) == 2:
+                # Controlla se le due classi hanno lo stesso docente di motoria
+                t1 = next((a.teacher_id for a in assignments if a.class_id == pair_c[0] and a.subject_id == "mot"), None)
+                t2 = next((a.teacher_id for a in assignments if a.class_id == pair_c[1] and a.subject_id == "mot"), None)
+                same_t = (t1 == t2 and t1 is not None)
+                
                 pg_list.append(ParallelGroup(
                     id=f"pg_mot_3_{i//2 + 1}",
                     name=f"Parallelismo Motoria Terze ({classes[pair_c[0]].name} + {classes[pair_c[1]].name})",
@@ -1007,6 +1012,7 @@ def get_sample_problem(
                     parallel_hours=2,
                     force_consecutive_block=True,
                     room_id="bebe_vio",
+                    is_same_teacher_merged=same_t,
                     is_active=True
                 ))
         config.parallel_groups = pg_list
