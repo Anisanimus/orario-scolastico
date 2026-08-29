@@ -1126,7 +1126,22 @@ def render_teacher_edit_card(problem: TimetableProblem, target_t: Optional[Teach
         cur_t_cdc = getattr(target_t, "cdc", "") if is_editing else ""
         cdc_idx = 0
         for i_c, c_str in enumerate(subject_areas):
-            if cur_t_cdc and (cur_t_cdc in c_str or c_str in cur_t_cdc or ("A-22" in cur_t_cdc and "Lettere" in c_str) or ("A-28" in cur_t_cdc and "Matematica" in c_str) or ("A-24" in cur_t_cdc and "Inglese" in c_str) or ("A-60" in cur_t_cdc and "Tecnologia" in c_str) or ("A-30" in cur_t_cdc and "Musica" in c_str) or ("A-01" in cur_t_cdc and "Arte" in c_str) or ("A-48" in cur_t_cdc and "Motorie" in c_str)):
+            if cur_t_cdc and (
+                cur_t_cdc.lower() in c_str.lower() 
+                or c_str.lower() in cur_t_cdc.lower()
+                or ("a-56" in cur_t_cdc.lower() and "a-56" in c_str.lower())
+                or ("chitarra" in cur_t_cdc.lower() and "a-56" in c_str.lower())
+                or ("violino" in cur_t_cdc.lower() and "a-56" in c_str.lower())
+                or ("flauto" in cur_t_cdc.lower() and "a-56" in c_str.lower())
+                or ("clarinetto" in cur_t_cdc.lower() and "a-56" in c_str.lower())
+                or ("a-22" in cur_t_cdc and "Lettere" in c_str) 
+                or ("a-28" in cur_t_cdc and "Matematica" in c_str) 
+                or ("a-24" in cur_t_cdc and "Inglese" in c_str) 
+                or ("a-60" in cur_t_cdc and "Tecnologia" in c_str) 
+                or ("a-30" in cur_t_cdc and "Musica" in c_str and "A-56" not in cur_t_cdc) 
+                or ("a-01" in cur_t_cdc and "Arte" in c_str) 
+                or ("a-48" in cur_t_cdc and "Motorie" in c_str)
+            ):
                 cdc_idx = i_c
                 break
         t_cdc_label = st.selectbox("Materia / Area di Insegnamento", subject_areas, index=cdc_idx, key=f"t_cdc_sel{t_key_suffix}")
