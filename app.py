@@ -1967,6 +1967,62 @@ active_scen = compute_active_scenario(problem)
 if "dada_model_active_toggle" not in st.session_state:
     st.session_state["dada_model_active_toggle"] = bool(problem.config.is_dada)
 
+st.markdown("""
+<style>
+  /* Mockup Layout Polish */
+  .stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    background-color: #f8fafc;
+    padding: 8px 12px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 20px;
+  }
+  .stTabs [data-baseweb="tab"] {
+    height: 48px;
+    border-radius: 8px;
+    padding: 0 16px;
+    font-weight: 600;
+    font-size: 13.5px;
+    border: 1px solid transparent;
+    background-color: transparent;
+    color: #475569;
+    transition: all 0.2s ease;
+  }
+  .stTabs [data-baseweb="tab"]:hover {
+    color: #1e40af;
+    background-color: #ffffff;
+    border-color: #cbd5e1;
+  }
+  .stTabs [aria-selected="true"] {
+    background-color: #eff6ff !important;
+    color: #1d4ed8 !important;
+    border-color: #93c5fd !important;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
+  }
+  
+  /* Cards & Accordions */
+  .mockup-card-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .info-badge-tip {
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 50%;
+    margin-left: 6px;
+  }
+</style>
+""", unsafe_allow_html=True)
+
 # SIDEBAR LATERALE
 with st.sidebar:
     st.markdown(f"""
