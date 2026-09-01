@@ -90,7 +90,7 @@ def get_sample_problem(
     second_lang: str = "Spagnolo", 
     with_theater: bool = False, 
     num_days: int = 5,
-    with_musical_curriculum: bool = True,
+    with_musical_curriculum: bool = False,
     with_extended_curriculum: bool = False
 ) -> TimetableProblem:
     """
