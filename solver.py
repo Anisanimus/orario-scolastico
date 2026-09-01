@@ -650,6 +650,8 @@ class TimetableSolver:
 
         for comp_rooms_tuple, assign_ids in room_group_map.items():
             rooms_in_grp = [prob.rooms[r_id] for r_id in comp_rooms_tuple if r_id in prob.rooms]
+            if not rooms_in_grp:
+                continue
             total_cap = sum(r.capacity for r in rooms_in_grp)
             
             # Per ciascun gruppo parallelo che usa questo spazio condiviso, le sue classi occupano 1 unità di capienza congiunta
@@ -665,30 +667,15 @@ class TimetableSolver:
 
             for d in range(num_days):
                 for h in range(daily_hours[d]):
-                    pg_active_indicators = []
+                    slot_terms = [self.x[a_id, d, h] for a_id in stand_alone_room_assigns]
                     for grp, g_a_ids in pg_in_room:
                         p_vars_dict = self.parallel_group_slot_vars.get(grp.id)
                         if p_vars_dict and (d, h) in p_vars_dict:
-                            pg_active_indicators.append(p_vars_dict[d, h])
+                            p_v = p_vars_dict[d, h]
+                            slot_terms.append(sum(self.x[aid, d, h] for aid in g_a_ids) - (len(g_a_ids) - 1) * p_v)
                         else:
-                            pg_active_indicators.append(self.x[g_a_ids[0], d, h])
-                    
-                    if len(rooms_in_grp) == 1 and pg_in_room:
-                        # Spazio speciale unico (es. Palestra Unica con gruppi paralleli autorizzati):
-                        # Ciascun gruppo parallelo autorizzato conta come 1 occupazione e ciascuna classe singola conta come 1 occupazione.
-                        # Il totale delle occupazioni indipendenti non può superare 1 (nessuna sovrapposizione casuale!).
-                        m.Add(sum(self.x[a_id, d, h] for a_id in stand_alone_room_assigns) + sum(pg_active_indicators) <= 1)
-                    else:
-                        # Laboratori con spazi multipli (es. Lab Arte 1 + Lab Arte 2)
-                        slot_terms = [self.x[a_id, d, h] for a_id in stand_alone_room_assigns]
-                        for grp, g_a_ids in pg_in_room:
-                            p_vars_dict = self.parallel_group_slot_vars.get(grp.id)
-                            if p_vars_dict and (d, h) in p_vars_dict:
-                                p_v = p_vars_dict[d, h]
-                                slot_terms.append(sum(self.x[aid, d, h] for aid in g_a_ids) - (len(g_a_ids) - 1) * p_v)
-                            else:
-                                slot_terms.append(self.x[g_a_ids[0], d, h])
-                        m.Add(sum(slot_terms) <= total_cap)
+                            slot_terms.append(self.x[g_a_ids[0], d, h])
+                    m.Add(sum(slot_terms) <= total_cap)
 
         # 9. VINCOLO DIDATTICO RIGIDO: Max ore al giorno per materia in una classe
         for a in prob.assignments:
@@ -1108,8 +1095,26 @@ class TimetableSolver:
                                 assigned_r_id = r_id
                                 assigned_r_name = prob.rooms[r_id].name
                                 break
-                    # Fallback di sicurezza: prima aula compatibile
+                    # Se non libera tra le compatibili dirette per tutto il blocco, cerca tra altre aule libere compatibili
                     if assigned_r_id is None:
+                        # 1. Prova ora per ora tra le compatibili
+                        for r_id in sorted_comp:
+                            if r_id in prob.rooms:
+                                r_cap = prob.rooms[r_id].capacity
+                                if all(len(room_occupancy.get((r_id, d, h), [])) < r_cap for h in h_list):
+                                    assigned_r_id = r_id
+                                    assigned_r_name = prob.rooms[r_id].name
+                                    break
+                    if assigned_r_id is None:
+                        # 2. Cerca tra tutte le aule della scuola una stanza libera per evitare doppie allocazioni fittizie
+                        for r_id, r_obj in prob.rooms.items():
+                            if not r_obj.is_special_lab:
+                                if all(len(room_occupancy.get((r_id, d, h), [])) < r_obj.capacity for h in h_list):
+                                    assigned_r_id = r_id
+                                    assigned_r_name = r_obj.name
+                                    break
+                    if assigned_r_id is None:
+                        # 3. Fallback finale prioritario
                         for r_id in sorted_comp:
                             if r_id in prob.rooms:
                                 assigned_r_id = r_id
@@ -1194,10 +1199,10 @@ class TimetableSolver:
                                     else:
                                         comp_desc_parts.append(f"Classi Aperte con {', '.join(other_c_names)}")
                                     
-                    # 3. Stessa Aula / Palestra condivisa con altre classi nello stesso momento
+                    # 3. Stessa Aula / Palestra condivisa con altre classi nello stesso momento (SOLO se capienza > 1)
                     if r_id and r_id in prob.rooms:
                         room_obj = prob.rooms[r_id]
-                        if room_obj.capacity > 1 or room_obj.is_special_lab or "palestra" in r_id.lower() or "palestra" in room_obj.name.lower():
+                        if room_obj.capacity > 1:
                             same_room_other = [
                                 (oa, occ_r, os_info) for (oa, occ_r, os_info) in slot_info_list
                                 if occ_r == r_id and oa.id != a_item.id and (oa.class_id not in s_info.parallel_classes)
