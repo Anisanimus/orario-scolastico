@@ -1984,7 +1984,7 @@ with st.sidebar:
     is_std_act = (active_scen == "standard")
     if st.button(f"{'✅ ' if is_std_act else ''}🔄 Standard (5 Giorni - 18 cl.)", type="primary" if is_std_act else "secondary", use_container_width=True, help="Carica scenario demo tradizionale su 5 giorni (Lun-Ven, 6 ore/giorno) per 18 classi con aule ordinarie"):
         st.session_state.clear()
-        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=False, with_theater=False, num_days=5)
+        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=False, with_theater=False, num_days=5, with_musical_curriculum=False, with_extended_curriculum=False)
         st.session_state["dada_model_active_toggle"] = False
         st.session_state.result = None
         st.rerun()
@@ -1992,7 +1992,7 @@ with st.sidebar:
     is_std6_act = (active_scen == "standard_6d")
     if st.button(f"{'✅ ' if is_std6_act else ''}📅 Settimana 6 Giorni (18 cl. + Giorno Libero)", type="primary" if is_std6_act else "secondary", use_container_width=True, help="Carica scenario demo su 6 giorni (Lun-Sab, 5 ore/giorno) con giorno libero preferito assegnato a ciascun docente"):
         st.session_state.clear()
-        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=False, with_theater=False, num_days=6)
+        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=False, with_theater=False, num_days=6, with_musical_curriculum=False, with_extended_curriculum=False)
         st.session_state["dada_model_active_toggle"] = False
         st.session_state.result = None
         st.rerun()
@@ -2000,7 +2000,7 @@ with st.sidebar:
     is_dada_act = (active_scen == "dada")
     if st.button(f"{'✅ ' if is_dada_act else ''}🏫 Modello DADA (18 cl.)", type="primary" if is_dada_act else "secondary", use_container_width=True, help="Carica scenario demo DADA standard con aule disciplinari"):
         st.session_state.clear()
-        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=False, num_days=5)
+        st.session_state.problem = get_sample_problem(num_classes=18, is_dada=True, with_theater=False, num_days=5, with_musical_curriculum=False, with_extended_curriculum=False)
         st.session_state["dada_model_active_toggle"] = True
         st.session_state.result = None
         st.rerun()
