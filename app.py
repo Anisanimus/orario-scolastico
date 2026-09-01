@@ -2257,7 +2257,8 @@ tabs = st.tabs([
     "👥 3. Docenti & Cattedre",
     "🔗 4. Blocchi 2h/3h & Paralleli",
     "♿ 5. Sostegno & DVA",
-    "🚀 6. Genera Orario"
+    "🚀 6. Genera Orario",
+    "📅 7. Visualizza Orario & Export"
 ])
 
 # =============================================================
@@ -4659,13 +4660,18 @@ with tabs[5]:
         st.divider()
         render_support_solver_section(problem, st.session_state.get("result", res))
 
-        # -------------------------------------------------------------
-        # SEZIONE VISUALIZZA & ESPORTA TABELLONI
-        # -------------------------------------------------------------
-        st.divider()
-        st.subheader("📅 Visualizzazione e Download dell'Orario")
-        st.caption("Scarica i prospetti orari completi in formato Excel modificabile o in eleganti PDF A4 Orizzontali pronti per la stampa.")
-        
+# =============================================================
+# TAB 7: VISUALIZZA ORARIO & ESPORTAZIONI
+# =============================================================
+with tabs[6]:
+    st.header("📅 Visualizza Orario & Esportazioni")
+    st.caption("Visualizza i prospetti orari completi a video, con tabellone docenti, per classe, per aula DADA e scarica in Excel o PDF.")
+
+    res_tab7: Optional[TimetableResult] = st.session_state.get("result")
+    if not res_tab7 or res_tab7.status not in ["OPTIMAL", "FEASIBLE"]:
+        st.info("ℹ️ **Nessun orario calcolato al momento**: Vai nella scheda **🚀 6. Genera Orario** per avviare il solutore e produrre l'orario scolastico.")
+    else:
+        res = res_tab7
         sup_res_obj = st.session_state.get("support_result")
         
         # 1. ESPORTAZIONI EXCEL
