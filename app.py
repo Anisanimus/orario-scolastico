@@ -178,7 +178,7 @@ def render_subject_coupling_panel(problem: TimetableProblem, key_prefix: str = "
             should_c = problem.config.subject_block_preferences.get(a.subject_id, False)
             if should_c and a.hours_per_week >= 2:
                 a.force_double_hours = True
-                a.max_daily_hours = 2
+                a.max_daily_hours = 2 if a.hours_per_week <= 5 else 4
             else:
                 a.force_double_hours = False
                 a.max_daily_hours = 1 if a.hours_per_week in [2, 3] else 2

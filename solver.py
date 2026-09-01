@@ -409,22 +409,17 @@ class TimetableSolver:
                         matching = [
                             r_id for r_id, r in prob.rooms.items()
                             if a.subject_id in r.subject_ids
-                            and (not getattr(r, "teacher_ids", []) or a.teacher_id in getattr(r, "teacher_ids", []))
                         ]
                         if not matching:
-                            # Fallback 1: qualsiasi aula della stessa materia
-                            matching = [r_id for r_id, r in prob.rooms.items() if a.subject_id in r.subject_ids]
-                        if matching:
-                            matching.sort(key=lambda r_id: getattr(prob.rooms[r_id], "priority", 1))
-                            comp_rooms = matching
-                        else:
-                            generic = [
+                            # Fallback generico
+                            matching = [
                                 r_id for r_id, r in prob.rooms.items()
                                 if not r.is_special_lab and len(r.subject_ids) == 0
                             ]
-                            if generic:
-                                generic.sort(key=lambda r_id: getattr(prob.rooms[r_id], "priority", 1))
-                                comp_rooms = generic
+                        if matching:
+                            # Prioritizza le aule dove il docente è titolare, poi le altre della stessa materia
+                            matching.sort(key=lambda r_id: (0 if a.teacher_id in getattr(prob.rooms[r_id], "teacher_ids", []) else 1, getattr(prob.rooms[r_id], "priority", 1)))
+                            comp_rooms = matching
                     else:
                         matching_special = [
                             r_id for r_id, r in prob.rooms.items()
@@ -607,6 +602,7 @@ class TimetableSolver:
 
                     # Regola 2: Massimo ore al giorno (default 5 ore)
                     m.Add(sum(daily_active_terms) <= max_daily * day_act)
+                    m.Add(day_act <= sum(daily_active_terms))
 
                     # Regola 3: Fino a 4 ore di fila (mai 5 ore consecutive continue)
                     if max_consec < H:
@@ -707,7 +703,7 @@ class TimetableSolver:
                     daily_slots = [self.x[a.id, d, h] for h in range(daily_hours[d])]
                     m.Add(sum(daily_slots) <= eff_max_h)
             else:
-                eff_max_h = 2
+                eff_max_h = 2 if a.hours_per_week <= 5 else 4
                 for d in range(num_days):
                     daily_slots = [self.x[a.id, d, h] for h in range(daily_hours[d])]
                     m.Add(sum(daily_slots) <= eff_max_h)
@@ -840,31 +836,46 @@ class TimetableSolver:
 
                     day_pairs = []
                     is_dada_strict_pairs = getattr(prob.config, "is_dada", False) and getattr(prob.config, "dada_strict_even_pairs", False)
-                    a_pairs = []
                     for d in range(num_days):
                         H = daily_hours[d]
                         if H >= 2:
+                            d_pairs = []
                             allowed_h_starts = [h for h in range(0, H - 1, 2)] if is_dada_strict_pairs else [h for h in range(H - 1)]
                             for h in allowed_h_starts:
                                 pair_var = m.NewBoolVar(f"pair_{a.id}_d{d}_h{h}")
-                                m.AddBoolAnd([self.x[a.id, d, h], self.x[a.id, d, h + 1]]).OnlyEnforceIf(pair_var)
-                                m.AddBoolOr([self.x[a.id, d, h].Not(), self.x[a.id, d, h + 1].Not()]).OnlyEnforceIf(pair_var.Not())
-                                a_pairs.append(pair_var)
+                                m.Add(pair_var <= self.x[a.id, d, h])
+                                m.Add(pair_var <= self.x[a.id, d, h + 1])
+                                m.Add(pair_var >= self.x[a.id, d, h] + self.x[a.id, d, h + 1] - 1)
+                                d_pairs.append(pair_var)
                                 self.all_pair_vars.append(pair_var)
-                        # In ogni giorno ci può essere al massimo 1 blocco da 2 ore per questa materia
-                        m.Add(sum(self.x[a.id, d, h] for h in range(H)) <= 2)
 
-                    if a_pairs:
+                            if d_pairs:
+                                # Nel giorno ci può essere al massimo 1 blocco da 2h per questa materia
+                                day_has_pair = m.NewBoolVar(f"d_pair_{a.id}_{d}")
+                                for pv in d_pairs:
+                                    m.Add(day_has_pair >= pv)
+                                m.Add(day_has_pair <= sum(d_pairs))
+                                day_pairs.append(day_has_pair)
+                                
+                                # Se il monte ore è <= 5, in quel giorno o ci sono 2 ore consecutive o 0/1 ora singola
+                                if a.hours_per_week <= 5:
+                                    m.Add(sum(self.x[a.id, d, h] for h in range(H)) <= 2)
+                                else:
+                                    m.Add(sum(self.x[a.id, d, h] for h in range(H)) <= 4)
+
+                    if day_pairs:
                         if in_1h_parallel:
-                            # Con 1h parallela singola (es. 6h totali = 2 blocchi da 2h + 2 ore singole oppure 2 blocchi + 1h parallela):
-                            # Il numero di blocchi da 2h può essere pari a (hours_per_week - 1)//2 oppure hours_per_week // 2
                             min_pairs = (a.hours_per_week - 1) // 2
-                            m.Add(sum(a_pairs) >= min_pairs)
-                            m.Add(sum(a_pairs) <= a.hours_per_week // 2)
+                            m.Add(sum(day_pairs) >= min_pairs)
+                            m.Add(sum(day_pairs) <= a.hours_per_week // 2)
+                        elif a.hours_per_week == 2:
+                            # Materie da 2h settimanali (es. Arte, Musica, Tec, Mot): esattamente 1 blocco da 2h
+                            m.Add(sum(day_pairs) == 1)
                         else:
+                            # Materie da 3h, 4h, 5h, 6h settimanali: almeno 1 blocco da 2h garantito, fino al massimo teorico
                             target_pairs = a.hours_per_week // 2
-                            # Vincolo rigido matematico: 100% dei blocchi da 2 ore garantiti accoppiati
-                            m.Add(sum(a_pairs) == target_pairs)
+                            m.Add(sum(day_pairs) >= 1)
+                            m.Add(sum(day_pairs) <= target_pairs)
 
         # E-bis. MINIMIZZAZIONE USO SPAZI SECONDARI / EMERGENZA (Priorità Aule & Palestre)
         # Se un gruppo di aule contiene spazi a priorità differenziata (es. Palestra Principale Priorità 1 vs Emergenza Priorità 2),

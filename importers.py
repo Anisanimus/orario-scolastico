@@ -1131,13 +1131,14 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
     return output.getvalue()
 
 
-def parse_unified_school_excel(file_bytes: bytes, base_config: Optional[SchoolConfig] = None) -> Tuple[TimetableProblem, List[str]]:
+def parse_unified_school_excel(file_bytes: Any, base_config: Optional[SchoolConfig] = None) -> Tuple[TimetableProblem, List[str]]:
     """
     Parser intelligente che supporta sia il nuovo formato multi-foglio unificato (.xlsx)
     sia i file legacy a foglio singolo.
     """
     logs = []
-    xl = pd.ExcelFile(io.BytesIO(file_bytes))
+    raw_b = file_bytes.getvalue() if hasattr(file_bytes, "getvalue") else file_bytes
+    xl = pd.ExcelFile(io.BytesIO(raw_b))
     sheet_names = xl.sheet_names
 
     # Controlla se è il nuovo formato multi-foglio
