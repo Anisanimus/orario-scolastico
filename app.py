@@ -2253,12 +2253,11 @@ Il solutore rispetta automaticamente 4 regole categoriche per tutti i docenti:
 
 tabs = st.tabs([
     "⚙️ 1. Struttura & Indirizzi",
-    "🏫 2. Classi & Aule",
-    "👥 3. Docenti & Cattedre",
-    "🔗 4. Blocchi 2h/3h & Paralleli",
-    "♿ 5. Sostegno & DVA",
-    "🚀 6. Genera Orario",
-    "📅 7. Visualizza Orario & Export"
+    "👥 2. Docenti, Spazi & Aule",
+    "🔗 3. Blocchi 2h/3h & Paralleli",
+    "♿ 4. Sostegno & DVA",
+    "🚀 5. Genera Orario",
+    "📅 6. Visualizza Orario & Export"
 ])
 
 # =============================================================
@@ -3016,11 +3015,10 @@ with tabs[1]:
             st.rerun()
     
 # =============================================================
-# TAB 2: CLASSI, MATERIE & AULE / LABORATORI
+# TAB 3: CLASSI, MATERIE, AULE & CONSIGLI DI CLASSE
 # =============================================================
-with tabs[1]:
-    st.header("🏫 Gestione Classi & Aule / Laboratori")
-    st.caption("Configura le classi e le sezioni della scuola, e definisci gli spazi didattici con la loro capienza.")
+with tabs[2]:
+    st.header("👥 Docenti, Cattedre & Consigli di Classe")
     st.caption("Configura le classi, le materie, le aule/laboratori con docenti assegnati e il quadro didattico del consiglio di classe.")
     
     subtab_classi, subtab_materie, subtab_aule, subtab_consigli = st.tabs([
@@ -3549,13 +3547,13 @@ with tabs[1]:
                 if tot_c_hours == 30:
                     st.success(f"📊 **Totale Monte Ore Classe {c_obj.name}**: **{tot_c_hours} / 30 ore** (Perfetto al 100% ✅)")
                 elif tot_c_hours < 30:
-                    st.warning(f"📊 **Totale Monte Ore Classe {c_obj.name}**: **{tot_c_hours} / 30 ore** (Mancano **{30 - tot_c_hours} ore**)")
+                        st.warning(f"📊 **Totale Monte Ore Classe {c_obj.name}**: **{tot_c_hours} / 30 ore** (Mancano **{30 - tot_c_hours} ore**)")
                 else:
                     st.error(f"📊 **Totale Monte Ore Classe {c_obj.name}**: **{tot_c_hours} / 30 ore** (Eccesso di **+{tot_c_hours - 30} ore**)")
                     if st.button(f"⚡ Pareggia Subito a 30 Ore (Scala 1h da Italiano per fare spazio a Teatro)", key=f"fix_ita_btn_{sel_class_cfg}"):
                         st.session_state[f"cfg_c_{sel_class_cfg}_ita_h"] = 5
                         st.rerun()
-    
+
                 if st.button(f"💾 Salva Consiglio di Classe & Materie per {c_obj.name}", type="primary"):
                     # Rimuovi le vecchie assegnazioni di questa classe
                     problem.assignments = [a for a in problem.assignments if a.class_id != sel_class_cfg]
@@ -3581,9 +3579,9 @@ with tabs[1]:
             st.info("Aggiungi prima almeno una classe per poterne definire il consiglio di classe e le materie.")
     
 # =============================================================
-# TAB 4: BLOCCHI DA 2 E 3 ORE & PARALLELISMI DIDATTICI
+# TAB 3: BLOCCHI DA 2 E 3 ORE & PARALLELISMI DIDATTICI
 # =============================================================
-with tabs[3]:
+with tabs[2]:
     st.header("🔗 Blocchi 2h/3h & Parallelismi Didattici")
     st.caption("Configura per ciascuna materia o docente le forzature a blocchi da 2 o 3 ore consecutive e i parallelismi orari (es. palestre o classi aperte).")
     
@@ -3592,9 +3590,9 @@ with tabs[3]:
     render_parallel_classes_panel(problem, key_prefix="tab4_parallels")
 
 # =============================================================
-# TAB 5: SOSTEGNO, DVA & POTENZIAMENTO
+# TAB 4: SOSTEGNO, DVA & POTENZIAMENTO
 # =============================================================
-with tabs[4]:
+with tabs[3]:
     st.header("♿ Sostegno Didattico, DVA & Potenziamento")
     render_support_management_tab(problem)
     st.write("Verifica l'allineamento delle **30 ore per classe** e la copertura delle cattedre (**18h / Part-Time**) di tutti i docenti.")
@@ -3872,11 +3870,12 @@ with tabs[4]:
                     st.rerun()
 
     # SELETTORE VISTA ORDINATA
+    st.write("")
     view_mode = st.radio(
-        "Modalità di visualizzazione e modifica delle cattedre:",
+        "Modalità di Visualizzazione & Modifica Cattedre:",
         [
-            "👨‍🏫 Vista per Docente (Cattedre e Desiderata per Docente)",
-            "🏫 Vista per Classe (Consiglio di Classe e Materie)",
+            "👨‍🏫 Vista per Docente",
+            "🏫 Vista per Classe",
             "📚 Vista per Materia / CdC",
             "📋 Tabella Generale con Filtri e Ordinamento"
         ],
@@ -4001,64 +4000,85 @@ with tabs[4]:
                     with r_cols[4]:
                         st.caption(f"Max {a.max_daily_hours}h/gg")
                     with r_cols[5]:
-                        if st.button("✏️", key=f"edit_tcls_{a_idx}"):
+                        if st.button("✏️", key=f"edit_tcls_{a_idx}", help=f"Modifica cattedra {s_name} in {c.name}"):
                             st.session_state.editing_assign_idx = a_idx
                             st.rerun()
                     with r_cols[6]:
-                        if st.button("🗑️", key=f"del_tcls_{a_idx}"):
+                        if st.button("🗑️", key=f"del_tcls_{a_idx}", help="Elimina insegnamento"):
                             del problem.assignments[a_idx]
                             if st.session_state.editing_assign_idx == a_idx:
                                 st.session_state.editing_assign_idx = None
                             st.success("Insegnamento eliminato!")
                             st.rerun()
+            else:
+                st.info(f"Nessun insegnamento assegnato alla classe {c.name}.")
 
     # -------------------------------------------------------------
     # VISTA 3: RAGGRUPPATA PER MATERIA / CDC
     # -------------------------------------------------------------
     elif "Materia" in view_mode:
-        st.markdown("##### 📚 Cattedre divise per Materia e Disciplina")
+        st.markdown("##### 📚 Cattedre e Docenti divisi per Disciplina / CdC")
+        st.caption("Seleziona una materia per verificarne la copertura in tutte le sezioni.")
         
-        sbj_keys = list(problem.subjects.keys())
-        if sbj_keys:
+        subj_keys = list(problem.subjects.keys())
+        if subj_keys:
             sel_view_sid = st.selectbox(
                 "Scegli la Materia da ispezionare / modificare:",
-                sbj_keys,
+                subj_keys,
                 format_func=lambda x: f"{problem.subjects[x].name} ({sum(a.hours_per_week for a in problem.assignments if a.subject_id == x)}h totali)",
-                key="tab4_view_sel_sbj"
+                key="tab4_view_sel_subj"
             )
             
             s = problem.subjects[sel_view_sid]
             s_assign_list = [(idx, a) for idx, a in enumerate(problem.assignments) if a.subject_id == sel_view_sid]
             tot_h_s = sum(a.hours_per_week for _, a in s_assign_list)
-            cdc_badge = f"[{s.cdc}] " if getattr(s, "cdc", "") else ""
             
-            st.info(f"📚 **{cdc_badge}{s.name}**: {len(s_assign_list)} classi assegnate (Totale: {tot_h_s} ore)")
+            st.info(f"📘 **{s.name}**: {tot_h_s} ore settimanali complessive assegnate su {len(s_assign_list)} classi.")
             
             if s_assign_list:
+                th_cols = st.columns([2, 3, 2, 2, 2, 1, 1])
+                with th_cols[0]: st.markdown("**Classe**")
+                with th_cols[1]: st.markdown("**Docente Incaricato**")
+                with th_cols[2]: st.markdown("**Ore/Sett.**")
+                with th_cols[3]: st.markdown("**Ore Doppie**")
+                with th_cols[4]: st.markdown("**Max Ore/Gg**")
+                with th_cols[5]: st.markdown("**Mod.**")
+                with th_cols[6]: st.markdown("**Elim.**")
+                st.divider()
+
                 for a_idx, a in s_assign_list:
                     c_name = problem.classes[a.class_id].name if a.class_id in problem.classes else a.class_id
                     t_name = problem.teachers[a.teacher_id].name if a.teacher_id in problem.teachers else a.teacher_id
                     
-                    r_cols = st.columns([2, 3, 2, 2, 1, 1])
+                    r_cols = st.columns([2, 3, 2, 2, 2, 1, 1])
                     with r_cols[0]: st.markdown(f"**Classe {c_name}**")
                     with r_cols[1]: st.write(t_name)
                     with r_cols[2]: st.write(f"{a.hours_per_week} ore")
                     with r_cols[3]: st.caption("Blocco 2h 🔒" if a.force_double_hours else "Singole")
                     with r_cols[4]:
-                        if st.button("✏️", key=f"edit_tsubj_{a_idx}"):
+                        st.caption(f"Max {a.max_daily_hours}h/gg")
+                    with r_cols[5]:
+                        if st.button("✏️", key=f"edit_tsubj_{a_idx}", help=f"Modifica {s.name} in {c_name}"):
                             st.session_state.editing_assign_idx = a_idx
                             st.rerun()
-                    with r_cols[5]:
-                        if st.button("🗑️", key=f"del_tsubj_{a_idx}"):
+                    with r_cols[6]:
+                        if st.button("🗑️", key=f"del_tsubj_{a_idx}", help="Elimina insegnamento"):
                             del problem.assignments[a_idx]
+                            if st.session_state.editing_assign_idx == a_idx:
+                                st.session_state.editing_assign_idx = None
+                            st.success("Insegnamento eliminato!")
                             st.rerun()
+            else:
+                st.info(f"Nessuna cattedra assegnata per la materia {s.name}.")
 
     # -------------------------------------------------------------
-    # VISTA 4: TABELLA GENERALE CON FILTRI & ORDINAMENTO
+    # VISTA 4: TABELLA GENERALE COMPLETA CON FILTRI E ORDINAMENTO
     # -------------------------------------------------------------
     else:
-        st.markdown("##### 📋 Tabella Generale con Filtri e Ordinamento")
+        st.markdown("##### 📋 Tabella Generale Cattedre & Assegnazioni")
+        st.caption("Filtra e ordina l'elenco completo di tutti gli insegnamenti della scuola.")
         
+        # Filtri e Ordinamento
         f_col1, f_col2, f_col3, f_col4 = st.columns(4)
         with f_col1:
             filter_teacher = st.selectbox("Filtra per Docente:", ["-- Tutti i Docenti --"] + list(problem.teachers.keys()), format_func=lambda x: problem.teachers[x].name if x in problem.teachers else x)
@@ -4129,9 +4149,9 @@ with tabs[4]:
                 st.rerun()
 
 # =============================================================
-# TAB 6: GENERA ORARIO
+# TAB 5: GENERA ORARIO
 # =============================================================
-with tabs[5]:
+with tabs[4]:
     st.header("🚀 Generazione Automatica dell'Orario Scolastico")
     st.write(f"Solutore attivo per: **{problem.config.school_name}** ({'Modello DADA' if problem.config.is_dada else 'Modello Tradizionale'}).")
 
@@ -4661,9 +4681,9 @@ with tabs[5]:
         render_support_solver_section(problem, st.session_state.get("result", res))
 
 # =============================================================
-# TAB 7: VISUALIZZA ORARIO & ESPORTAZIONI
+# TAB 6: VISUALIZZA ORARIO & ESPORTAZIONI
 # =============================================================
-with tabs[6]:
+with tabs[5]:
     st.header("📅 Visualizza Orario & Esportazioni")
     st.caption("Visualizza i prospetti orari completi a video, con tabellone docenti, per classe, per aula DADA e scarica in Excel o PDF.")
 
