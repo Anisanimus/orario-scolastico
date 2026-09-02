@@ -780,14 +780,54 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
         # -------------------------------------------------------------
         p_cfg = problem.config if problem else SchoolConfig()
         d_hours_str = ", ".join(str(h) for h in getattr(p_cfg, "daily_hours", [6]*p_cfg.num_days))
+        
+        # Mappa preferenze accorpamento blocchi materie
+        block_prefs = getattr(p_cfg, "subject_block_preferences", {}) or {}
+        block_prefs_str = ", ".join([f"{k}:{'Si' if v else 'No'}" for k, v in block_prefs.items()]) if block_prefs else ""
+        
+        # Criteri di ottimizzazione
+        crit = getattr(p_cfg, "optimization_criteria", None)
+        max_gaps_val = getattr(crit, "max_gap_limit", 5) if crit else 5
+        strict_gaps_val = "Si" if (crit and getattr(crit, "strict_gap_limit", False)) else "No"
+        gap_fair_val = "Si" if (crit and getattr(crit, "enable_gap_fairness", True)) else "No"
+
+        # Strumenti musicali
+        inst_list = getattr(p_cfg, "musical_instruments", ["Flauto", "Violino", "Chitarra", "Clarinetto"]) or []
+        inst_str = ", ".join(inst_list)
+
         struct_data = [
             ["Nome Scuola", p_cfg.school_name, "Nome dell'Istituto Scolastico"],
             ["Numero Giorni Settimanali", p_cfg.num_days, "5 (Settimana Corta) oppure 6 (Settimana Lunga)"],
             ["Ore Giornaliere", d_hours_str, "Ore per giorno separate da virgola (es. '6, 6, 6, 6, 6')"],
-            ["Modello DADA", "Si" if getattr(p_cfg, "is_dada", True) else "No", "Si = Aule tematiche DADA; No = Modello tradizionale aule fisse"],
+            ["Modello DADA", "Si" if getattr(p_cfg, "is_dada", False) else "No", "Si = Aule tematiche DADA; No = Modello tradizionale aule fisse"],
+            ["Blocchi Rigidi DADA (1-2, 3-4, 5-6)", "Si" if getattr(p_cfg, "dada_strict_even_pairs", getattr(p_cfg, "is_strict_dada_slots", False)) else "No", "Forza spostamenti aule solo agli intervalli"],
             ["Seconda Lingua Comunitaria", getattr(p_cfg, "second_language", "Spagnolo"), "Spagnolo, Francese, Tedesco o Personalizzata"],
-            ["Blocchi Rigidi DADA (1-2, 3-4, 5-6)", "Si" if getattr(p_cfg, "is_strict_dada_slots", False) else "No", "Forza spostamenti aule solo agli intervalli"],
-            ["Versione Formato File", "2.0", "Non modificare questo valore"]
+            
+            # --- ORA DI APPROFONDIMENTO PTOF ---
+            ["Tipo Approfondimento PTOF", getattr(p_cfg, "approfondimento_type", "subject"), "'subject' = Potenziamento materia, 'custom_activity' = Attività/Teatro"],
+            ["Materia Approfondimento Potenziata", getattr(p_cfg, "approfondimento_subject", "ita"), "ID materia potenziata (es. ita, mat, sci, ing, tec, spa)"],
+            ["Nome Attivita PTOF Personalizzata", getattr(p_cfg, "approfondimento_custom_name", "Laboratorio di Teatro"), "Nome dell'attività personalizzata PTOF"],
+            ["CdC Attivita PTOF", getattr(p_cfg, "approfondimento_cdc", "A-22"), "Classe di concorso (es. A-22, A-28, A-24, A-60, A-30, A-01)"],
+            ["Compensazione CdC PTOF", getattr(p_cfg, "approfondimento_deduct_from", "ita"), "Disciplina da cui scalare 1h ('ita', 'sto', 'geo', 'none')"],
+            ["Spazio Attivita PTOF", getattr(p_cfg, "approfondimento_custom_room", "aula_teatro"), "ID aula/spazio dedicato"],
+
+            # --- INDIRIZZO MUSICALE (32h) ---
+            ["Attiva Indirizzo Musicale", "Si" if getattr(p_cfg, "has_musical_curriculum", False) else "No", "Abilita la sezione a Indirizzo Musicale (32h)"],
+            ["Sezione Musicale", getattr(p_cfg, "musical_section", "F"), "Lettera della sezione musicale (es. F)"],
+            ["Strumenti Musicali Attivi", inst_str, "Strumenti insegnati separati da virgola"],
+            ["Docenti Compresenza Orchestra", getattr(p_cfg, "musical_orchestra_co_teachers", 4), "Numero docenti compresenti per orchestra (1-4)"],
+
+            # --- TEMPO PROLUNGATO (36h) ---
+            ["Attiva Tempo Prolungato", "Si" if getattr(p_cfg, "has_extended_curriculum", False) else "No", "Abilita le classi a Tempo Prolungato (36h)"],
+            ["Sezione Tempo Prolungato", getattr(p_cfg, "extended_section", "D"), "Sezione a tempo prolungato (es. D)"],
+            ["Durata Pausa Mensa Standard", getattr(p_cfg, "default_lunch_break_duration", 60), "Durata in minuti (0 = No Mensa, 30, 60, 90)"],
+
+            # --- PREFERENZE BLOCCHI & OTTIMIZZAZIONE ---
+            ["Preferenze Blocchi Materie", block_prefs_str, "Blocchi 2h consecutivi per materia (es. ita:Si, mot:Si, art:No)"],
+            ["Tetto Massimo Ore Buche", max_gaps_val, "Massimo ore buche tollerate per docente (slider)"],
+            ["Vincolo Tassativo Buche Rigido", strict_gaps_val, "Si = Vincolo rigido insuperabile, No = Desiderata ottimizzabile"],
+            ["Equita Distribuzione Buche", gap_fair_val, "Si = Distribuzione omogenea tra colleghi"],
+            ["Versione Formato File", "2.1", "Versione compatibile avanzata"]
         ]
         df_struct = pd.DataFrame(struct_data, columns=["Parametro", "Valore", "Descrizione"])
         df_struct.to_excel(writer, sheet_name="1_Struttura_e_Parametri", index=False)
@@ -871,14 +911,25 @@ def generate_unified_school_excel(problem: Optional[TimetableProblem] = None) ->
         class_rows = []
         if problem and problem.classes:
             for c in sorted(problem.classes.values(), key=lambda x: (x.grade, x.section)):
-                class_rows.append([c.name, c.grade, c.section])
+                aft_days_str = ", ".join(getattr(c, "afternoon_days", [])) if getattr(c, "afternoon_days", None) else ""
+                class_rows.append([
+                    c.name, 
+                    c.grade, 
+                    c.section, 
+                    getattr(c, "curriculum_type", "ordinario"), 
+                    getattr(c, "weekly_hours_target", 30), 
+                    aft_days_str, 
+                    getattr(c, "lunch_break_duration", 60)
+                ])
         else:
             class_rows = [
-                ["1ª A", 1, "A"],
-                ["2ª A", 2, "A"],
-                ["3ª A", 3, "A"]
+                ["1ª A", 1, "A", "ordinario", 30, "", 60],
+                ["2ª A", 2, "A", "ordinario", 30, "", 60],
+                ["3ª A", 3, "A", "ordinario", 30, "", 60],
+                ["1ª F", 1, "F", "musicale", 32, "Lunedì", 60],
+                ["1ª D", 1, "D", "prolungato", 36, "Martedì, Giovedì", 60]
             ]
-        class_cols = ["Classe", "Anno", "Sezione"]
+        class_cols = ["Classe", "Anno", "Sezione", "Indirizzo_Studio", "Target_Ore_Settimanali", "Giorni_Rientro_Pomeridiano", "Pausa_Mensa_Minuti"]
         df_class = pd.DataFrame(class_rows, columns=class_cols)
         df_class.to_excel(writer, sheet_name="3_Classi", index=False)
 
@@ -1161,6 +1212,8 @@ def parse_unified_school_excel(file_bytes: Any, base_config: Optional[SchoolConf
                 for _, r in df_s.iterrows():
                     param = str(r["Parametro"]).strip().lower()
                     val = str(r["Valore"]).strip()
+                    if not val or val.lower() == "nan":
+                        continue
                     if "nome scuola" in param and val:
                         config.school_name = val
                     elif "giorni" in param:
@@ -1170,12 +1223,60 @@ def parse_unified_school_excel(file_bytes: Any, base_config: Optional[SchoolConf
                             config.daily_hours = [int(x.strip()) for x in val.split(",") if x.strip()]
                         except:
                             config.daily_hours = [6] * config.num_days
-                    elif "dada" in param:
+                    elif "modello dada" in param or param == "dada":
                         config.is_dada = _parse_bool(val)
-                    elif "lingua" in param and val:
+                    elif "blocchi rigidi dada" in param or "rigidi" in param:
+                        b_rig = _parse_bool(val)
+                        config.is_strict_dada_slots = b_rig
+                        config.dada_strict_even_pairs = b_rig
+                    elif "seconda lingua" in param or "lingua" in param:
                         config.second_language = val
-                    elif "rigidi" in param:
-                        config.is_strict_dada_slots = _parse_bool(val)
+                    elif "tipo approfondimento" in param:
+                        config.approfondimento_type = val
+                    elif "materia approfondimento" in param:
+                        config.approfondimento_subject = val
+                    elif "nome attivita ptof" in param or "attivita ptof" in param:
+                        config.approfondimento_custom_name = val
+                    elif "cdc attivita ptof" in param or "cdc ptof" in param:
+                        config.approfondimento_cdc = val
+                    elif "compensazione cdc ptof" in param:
+                        config.approfondimento_deduct_from = val
+                    elif "spazio attivita ptof" in param:
+                        config.approfondimento_custom_room = val
+                    elif "attiva indirizzo musicale" in param:
+                        config.has_musical_curriculum = _parse_bool(val)
+                    elif "sezione musicale" in param:
+                        config.musical_section = val
+                    elif "strumenti musicali" in param:
+                        config.musical_instruments = [x.strip() for x in val.split(",") if x.strip()]
+                    elif "compresenza orchestra" in param or "orchestra" in param:
+                        config.musical_orchestra_co_teachers = _parse_int(val, default=4)
+                    elif "attiva tempo prolungato" in param:
+                        config.has_extended_curriculum = _parse_bool(val)
+                    elif "sezione tempo prolungato" in param:
+                        config.extended_section = val
+                    elif "pausa mensa" in param or "mensa" in param:
+                        config.default_lunch_break_duration = _parse_int(val, default=60)
+                    elif "preferenze blocchi" in param:
+                        bp_dict = {}
+                        for item in val.split(","):
+                            if ":" in item:
+                                s_k, s_v = item.split(":", 1)
+                                bp_dict[s_k.strip()] = _parse_bool(s_v.strip())
+                        if bp_dict:
+                            config.subject_block_preferences = bp_dict
+                    elif "tetto massimo ore buche" in param or "tetto" in param:
+                        if not hasattr(config, "optimization_criteria") or not config.optimization_criteria:
+                            config.optimization_criteria = OptimizationCriteria()
+                        config.optimization_criteria.max_gap_limit = _parse_int(val, default=5)
+                    elif "vincolo tassativo buche" in param or "tassativo" in param:
+                        if not hasattr(config, "optimization_criteria") or not config.optimization_criteria:
+                            config.optimization_criteria = OptimizationCriteria()
+                        config.optimization_criteria.strict_gap_limit = _parse_bool(val)
+                    elif "equita" in param:
+                        if not hasattr(config, "optimization_criteria") or not config.optimization_criteria:
+                            config.optimization_criteria = OptimizationCriteria()
+                        config.optimization_criteria.enable_gap_fairness = _parse_bool(val)
             logs.append(f"⚙️ Configurazione scuola caricata: **{config.school_name}** ({config.num_days} giorni, DADA: {'Sì' if config.is_dada else 'No'}).")
             break
 
@@ -1255,7 +1356,30 @@ def parse_unified_school_excel(file_bytes: Any, base_config: Optional[SchoolConf
                 c_id = _clean_id(c_name)
                 grade_v = _parse_int(r.get("Anno", 1), default=1)
                 sec_v = str(r.get("Sezione", "A")).strip()
-                classes[c_id] = SchoolClass(id=c_id, name=c_name, grade=grade_v, section=sec_v)
+                
+                # Campi curricolari avanzati
+                curr_type = str(r.get("Indirizzo_Studio", r.get("Indirizzo", "ordinario"))).strip().lower()
+                if curr_type not in ["ordinario", "musicale", "prolungato"]:
+                    curr_type = "ordinario"
+                
+                def_target_h = 32 if curr_type == "musicale" else (36 if curr_type == "prolungato" else 30)
+                target_h = _parse_int(r.get("Target_Ore_Settimanali", r.get("Ore_Settimanali", def_target_h)), default=def_target_h)
+                
+                aft_raw = str(r.get("Giorni_Rientro_Pomeridiano", r.get("Pomeriggi", ""))).strip()
+                aft_days = [x.strip() for x in aft_raw.split(",") if x.strip() and aft_raw.lower() != "nan"]
+                
+                lunch_dur = _parse_int(r.get("Pausa_Mensa_Minuti", r.get("Pausa_Mensa", 60)), default=60)
+
+                classes[c_id] = SchoolClass(
+                    id=c_id, 
+                    name=c_name, 
+                    grade=grade_v, 
+                    section=sec_v,
+                    curriculum_type=curr_type,
+                    weekly_hours_target=target_h,
+                    afternoon_days=aft_days,
+                    lunch_break_duration=lunch_dur
+                )
             logs.append(f"🏫 Caricate **{len(classes)} classi**.")
             break
 

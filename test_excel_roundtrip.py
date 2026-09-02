@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 import io
 import pandas as pd
 from sample_data import get_sample_problem
@@ -25,6 +25,10 @@ class ExcelImportExportTest(unittest.TestCase):
         self.assertEqual(len(prob_reloaded.classes), len(prob_orig.classes), "Numero classi non corrisponde dopo import")
         self.assertEqual(len(prob_reloaded.teachers), len(prob_orig.teachers), "Numero docenti non corrisponde dopo import")
         self.assertEqual(len(prob_reloaded.assignments), len(prob_orig.assignments), "Numero cattedre non corrisponde dopo import")
+        self.assertEqual(prob_reloaded.config.is_dada, prob_orig.config.is_dada)
+        self.assertEqual(prob_reloaded.config.second_language, prob_orig.config.second_language)
+        self.assertEqual(prob_reloaded.config.approfondimento_type, prob_orig.config.approfondimento_type)
+        self.assertEqual(prob_reloaded.config.approfondimento_subject, prob_orig.config.approfondimento_subject)
         print(" -> [OK] Roundtrip Excel Master SUPERATO con successo!")
 
     def test_2_timetable_generation_excel_exports(self):
