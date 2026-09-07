@@ -55,20 +55,12 @@ class TestMusicalCurriculumAndAfternoonSuite(unittest.TestCase):
             t = self.problem.teachers[tid]
             self.assertTrue("A-56" in t.cdc, f"Il docente {t.name} deve avere CdC A-56, trovato: {t.cdc}")
 
-    def test_03_single_gym_and_third_grade_parallelism(self):
-        """Verifica che ci sia 1 sola palestra, 3 gruppi di parallelismo terze mot e 1 parallelismo prime ita."""
+    def test_03_gym_and_italian_parallelism(self):
+        """Verifica le palestre a capienza 1 e 1 parallelismo prime ita."""
         gym_rooms = [r for r in self.problem.rooms.values() if "mot" in r.subject_ids]
-        self.assertEqual(len(gym_rooms), 1, f"Deve esserci esattamente 1 palestra, trovate: {len(gym_rooms)}")
-        gym = gym_rooms[0]
-        self.assertEqual(gym.id, "bebe_vio")
-        self.assertGreaterEqual(gym.capacity, 2, "La palestra unica deve poter accogliere 2 classi in parallelo")
-
-        mot_pgs = [pg for pg in self.problem.config.parallel_groups if pg.subject_id == "mot"]
-        self.assertEqual(len(mot_pgs), 3, "Devono esserci 3 gruppi di parallelismo motoria per le terze (3A+3B, 3C+3D, 3E+3F)")
-        for pg in mot_pgs:
-            self.assertEqual(pg.parallel_hours, 2)
-            self.assertEqual(len(pg.class_ids), 2)
-            self.assertTrue(pg.force_consecutive_block)
+        self.assertGreaterEqual(len(gym_rooms), 2, f"Devono esserci almeno 2 palestre distinte, trovate: {len(gym_rooms)}")
+        for gym in gym_rooms:
+            self.assertEqual(gym.capacity, 1, "Ciascuna palestra deve avere capienza 1 classe per evitare sovrapposizioni non richieste")
 
         ita_prime_pgs = [pg for pg in self.problem.config.parallel_groups if pg.subject_id == "ita"]
         self.assertEqual(len(ita_prime_pgs), 1, "Deve esserci 1 parallelismo per tutte le prime su Italiano")
@@ -76,27 +68,11 @@ class TestMusicalCurriculumAndAfternoonSuite(unittest.TestCase):
         self.assertEqual(ita_prime_pgs[0].parallel_hours, 1)
 
     def test_04_solver_feasibility_and_co_teaching(self):
-        """Esegue il solutore CP-SAT e verifica compresenze a 4 docenti e parallelismi in palestra."""
+        """Esegue il solutore CP-SAT e verifica compresenze a 4 docenti."""
         solver = TimetableSolver(self.problem, max_gap_limit=4, strict_gap_limit=False)
         result = solver.solve(max_time_seconds=45, random_seed=42)
 
         self.assertIn(result.status, ["OPTIMAL", "FEASIBLE"], f"Il solutore deve produrre una soluzione valida. Ricevuto: {result.status}")
-
-        # 1. Verifica che tutte le classi terze in parallelismo abbiano gli stessi slot di Motoria
-        mot_pgs = [pg for pg in self.problem.config.parallel_groups if pg.subject_id == "mot"]
-        for pg in mot_pgs:
-            c1, c2 = pg.class_ids
-            g1 = result.grid_by_class[c1]
-            g2 = result.grid_by_class[c2]
-            slots1 = [(d, h) for d in range(len(g1)) for h in range(len(g1[d])) if g1[d][h] and g1[d][h].subject_id == "mot"]
-            slots2 = [(d, h) for d in range(len(g2)) for h in range(len(g2[d])) if g2[d][h] and g2[d][h].subject_id == "mot"]
-            self.assertEqual(len(slots1), 2, f"Classe {c1} deve avere 2h di motoria, trovate: {len(slots1)}")
-            self.assertEqual(slots1, slots2, f"Parallelismo fallito tra {c1} e {c2}: {slots1} != {slots2}")
-            # Verifica blocco consecutivo
-            d1, h1 = slots1[0]
-            d2, h2 = slots1[1]
-            self.assertEqual(d1, d2, "Le 2 ore di motoria devono essere nello stesso giorno")
-            self.assertEqual(abs(h1 - h2), 1, "Le 2 ore di motoria devono essere consecutive")
 
         # 1-bis. Verifica parallelismo 1h tutte le prime su Italiano
         prime = ["1A", "1B", "1C", "1D", "1E", "1F"]
