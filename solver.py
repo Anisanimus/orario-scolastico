@@ -667,6 +667,7 @@ class TimetableSolver:
 
             for d in range(num_days):
                 for h in range(daily_hours[d]):
+                    # 1. Capienza numerica complessiva
                     slot_terms = [self.x[a_id, d, h] for a_id in stand_alone_room_assigns]
                     for grp, g_a_ids in pg_in_room:
                         p_vars_dict = self.parallel_group_slot_vars.get(grp.id)
@@ -676,6 +677,25 @@ class TimetableSolver:
                         else:
                             slot_terms.append(self.x[g_a_ids[0], d, h])
                     m.Add(sum(slot_terms) <= total_cap)
+
+                    # 2. VINCOLO RIGIDO ESCLUSIVITÀ CONDIVISIONE:
+                    # Se c'è una sola stanza condivisa (es. Unica Palestra):
+                    # - Una classe standalone (non in parallelismo) NON può condividere lo spazio con nessun'altra classe.
+                    # - Due gruppi paralleli differenti NON possono stare contemporaneamente nello stesso spazio.
+                    # In sintesi: o c'è 1 classe standalone da sola, OPPURE c'è ESATTAMENTE 1 gruppo di parallelismo attivo.
+                    if len(rooms_in_grp) == 1 and total_cap > 1:
+                        # Indicatori di attività nello slot (d, h)
+                        active_entities = []
+                        for aid in stand_alone_room_assigns:
+                            active_entities.append(self.x[aid, d, h])
+                        for grp, g_a_ids in pg_in_room:
+                            p_vars_dict = self.parallel_group_slot_vars.get(grp.id)
+                            if p_vars_dict and (d, h) in p_vars_dict:
+                                active_entities.append(p_vars_dict[d, h])
+                            else:
+                                active_entities.append(self.x[g_a_ids[0], d, h])
+                        # Al massimo 1 sola entità (o 1 classe singola, o 1 gruppo parallelo autorizzato) può usare lo spazio nello slot
+                        m.Add(sum(active_entities) <= 1)
 
         # 9. VINCOLO DIDATTICO RIGIDO: Max ore al giorno per materia in una classe
         for a in prob.assignments:

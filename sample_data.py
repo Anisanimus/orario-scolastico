@@ -978,8 +978,9 @@ def get_sample_problem(
                 is_special_lab=False,
                 priority=1
             )
-        rooms["bebe_vio"] = Classroom(id="bebe_vio", name="Palestra BEBE VIO (Principale)", subject_ids=["mot"], capacity=1, is_special_lab=True, priority=1)
-        rooms["palestra_muratori"] = Classroom(id="palestra_muratori", name="Palestra MURATORI (Secondaria)", subject_ids=["mot"], capacity=1, is_special_lab=True, priority=2)
+        rooms["bebe_vio"] = Classroom(id="bebe_vio", name="Palestra BEBE VIO (Unica Palestra)", subject_ids=["mot"], capacity=2 if with_musical_curriculum else 1, is_special_lab=True, priority=1)
+        if not with_musical_curriculum:
+            rooms["palestra_muratori"] = Classroom(id="palestra_muratori", name="Palestra MURATORI (Secondaria / Emergenza)", subject_ids=["mot"], capacity=1, is_special_lab=True, priority=2)
         rooms["lab_arte"] = Classroom(id="lab_arte", name="Laboratorio di Arte (Principale)", subject_ids=["art"], capacity=1, is_special_lab=True, priority=1)
         rooms["lab_arte_2"] = Classroom(id="lab_arte_2", name="Laboratorio di Arte (Secondario)", subject_ids=["art"], capacity=1, is_special_lab=True, priority=2)
         rooms["lab_informatica"] = Classroom(id="lab_informatica", name="Laboratorio di Informatica (Principale)", subject_ids=["tec"], capacity=1, is_special_lab=True, priority=1)
@@ -995,7 +996,28 @@ def get_sample_problem(
     # Parallelismi didattici predefiniti nello scenario:
     pg_list = []
     if with_musical_curriculum:
-        # Parallelismo 1 ora a settimana per tutte le Prime insieme su Italiano
+        # 1. Parallelismo Scienze Motorie sulle classi Terze (es. 3A con 3B, 3C con 3D, 3E con 3F) per capienza palestra
+        third_grade_classes = [c_id for c_id in class_keys if classes[c_id].grade == 3]
+        for i in range(0, len(third_grade_classes), 2):
+            pair_c = third_grade_classes[i:i+2]
+            if len(pair_c) == 2:
+                t1 = next((a.teacher_id for a in assignments if a.class_id == pair_c[0] and a.subject_id == "mot"), None)
+                t2 = next((a.teacher_id for a in assignments if a.class_id == pair_c[1] and a.subject_id == "mot"), None)
+                same_t = (t1 == t2 and t1 is not None)
+                
+                pg_list.append(ParallelGroup(
+                    id=f"pg_mot_3_{i//2 + 1}",
+                    name=f"Parallelismo Motoria Terze ({classes[pair_c[0]].name} + {classes[pair_c[1]].name})",
+                    subject_id="mot",
+                    class_ids=pair_c,
+                    parallel_hours=2,
+                    force_consecutive_block=True,
+                    room_id="bebe_vio",
+                    is_same_teacher_merged=same_t,
+                    is_active=True
+                ))
+
+        # 2. Parallelismo 1 ora a settimana per tutte le Prime insieme su Italiano
         first_grade_classes = [c_id for c_id in class_keys if classes[c_id].grade == 1]
         if len(first_grade_classes) >= 2:
             pg_list.append(ParallelGroup(
