@@ -52,7 +52,7 @@ class ComprehensiveScenarioAndCouplingTest(unittest.TestCase):
             if a.hours_per_week >= 2:
                 a.force_double_hours = True
                 a.max_daily_hours = 2 if a.hours_per_week <= 5 else 4
-        self._test_solve(prob, "DADA con Massimo Accorpamento (Tutte >= 2h)")
+        self._test_solve(prob, "DADA con Massimo Accorpamento (Tutte >= 2h)", max_time=25)
 
     def test_8_dada_with_all_single_hours(self):
         prob = get_sample_problem(num_classes=18, is_dada=True, with_theater=False, num_days=5, with_musical_curriculum=False, with_extended_curriculum=False)

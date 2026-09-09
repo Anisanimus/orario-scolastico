@@ -389,7 +389,7 @@ class TimetableSolver:
             if a.preferred_room_id and a.preferred_room_id in prob.rooms:
                 comp_rooms = [a.preferred_room_id]
             else:
-                # 2. Assegnazione aula a questo specifico docente (100% esaudita prioritariamente)
+                # 2. In DADA o con aule assegnate: verifica se esistono aule dedicate espressamente a questo docente
                 teacher_rooms = [
                     r_id for r_id, r in prob.rooms.items()
                     if a.teacher_id in getattr(r, "teacher_ids", [])
@@ -403,21 +403,26 @@ class TimetableSolver:
                     comp_rooms = [subj.special_room_id]
                 else:
                     # 3. Matching per materia:
-                    # Se DADA: match su tutte le aule dedicate alla disciplina (ordinate per priorità)
-                    # Se Tradizionale: match solo sui laboratori e aule speciali condivise (Palestre, Lab Arte, Musica, Tec)
+                    # Se DADA: match SOLO su aule dedicate alla disciplina che NON sono riservate ad altri docenti
+                    # Se Tradizionale: match solo sui laboratori e aule speciali condivise
                     if is_dada:
                         matching = [
                             r_id for r_id, r in prob.rooms.items()
                             if a.subject_id in r.subject_ids
+                            and (not getattr(r, "teacher_ids", []) or a.teacher_id in getattr(r, "teacher_ids", []))
                         ]
                         if not matching:
-                            # Fallback generico
+                            # Fallback solo su aule generiche non speciali e non riservate ad altri
                             matching = [
                                 r_id for r_id, r in prob.rooms.items()
                                 if not r.is_special_lab and len(r.subject_ids) == 0
+                                and (not getattr(r, "teacher_ids", []) or a.teacher_id in getattr(r, "teacher_ids", []))
                             ]
+                        if not matching:
+                            # Estremo fallback su qualsiasi aula della materia se non c'è altra scelta
+                            matching = [r_id for r_id, r in prob.rooms.items() if a.subject_id in r.subject_ids]
+                        
                         if matching:
-                            # Prioritizza le aule dove il docente è titolare, poi le altre della stessa materia
                             matching.sort(key=lambda r_id: (0 if a.teacher_id in getattr(prob.rooms[r_id], "teacher_ids", []) else 1, getattr(prob.rooms[r_id], "priority", 1)))
                             comp_rooms = matching
                     else:
@@ -640,12 +645,12 @@ class TimetableSolver:
                     if d < num_days and h < daily_hours[d]:
                         m.Add(self.x[a.id, d, h] == 1)
 
-        # 8. VINCOLO RIGIDO: Capienza Massima Aule Speciali & Laboratori (Palestre, Teatri, Lab Condivisi)
-        # Raggruppa SOLO le cattedre che competono per spazi speciali condivisi a capienza limitata
+        # 8. VINCOLO RIGIDO: Capienza Massima Aule & Laboratori (DADA, Palestre, Teatri, Lab Condivisi)
+        # Raggruppa le cattedre che condividono lo stesso gruppo di aule compatibili
         room_group_map: Dict[Tuple[str, ...], List[str]] = {}
         for a in prob.assignments:
             comp = tuple(sorted(self.assignment_compatible_rooms.get(a.id, [])))
-            if comp and any(r_id in prob.rooms and prob.rooms[r_id].is_special_lab for r_id in comp):
+            if comp:
                 room_group_map.setdefault(comp, []).append(a.id)
 
         for comp_rooms_tuple, assign_ids in room_group_map.items():
@@ -654,7 +659,7 @@ class TimetableSolver:
                 continue
             total_cap = sum(r.capacity for r in rooms_in_grp)
             
-            # Per ciascun gruppo parallelo che usa questo spazio condiviso, le sue classi occupano 1 unità di capienza congiunta
+            # Identifica eventuali gruppi di parallelismo associati a questo spazio
             pg_in_room = []
             assigns_in_room_pg = set()
             for grp in active_parallel_groups:
@@ -667,7 +672,7 @@ class TimetableSolver:
 
             for d in range(num_days):
                 for h in range(daily_hours[d]):
-                    # 1. Capienza numerica complessiva
+                    # 1. Capienza numerica complessiva per il pool di aule
                     slot_terms = [self.x[a_id, d, h] for a_id in stand_alone_room_assigns]
                     for grp, g_a_ids in pg_in_room:
                         p_vars_dict = self.parallel_group_slot_vars.get(grp.id)
@@ -679,12 +684,10 @@ class TimetableSolver:
                     m.Add(sum(slot_terms) <= total_cap)
 
                     # 2. VINCOLO RIGIDO ESCLUSIVITÀ CONDIVISIONE:
-                    # Se c'è una sola stanza condivisa (es. Unica Palestra):
+                    # Se c'è una sola stanza condivisa (es. Unica Palestra) a capienza > 1 per parallelismi:
                     # - Una classe standalone (non in parallelismo) NON può condividere lo spazio con nessun'altra classe.
                     # - Due gruppi paralleli differenti NON possono stare contemporaneamente nello stesso spazio.
-                    # In sintesi: o c'è 1 classe standalone da sola, OPPURE c'è ESATTAMENTE 1 gruppo di parallelismo attivo.
                     if len(rooms_in_grp) == 1 and total_cap > 1:
-                        # Indicatori di attività nello slot (d, h)
                         active_entities = []
                         for aid in stand_alone_room_assigns:
                             active_entities.append(self.x[aid, d, h])
@@ -694,7 +697,6 @@ class TimetableSolver:
                                 active_entities.append(p_vars_dict[d, h])
                             else:
                                 active_entities.append(self.x[g_a_ids[0], d, h])
-                        # Al massimo 1 sola entità (o 1 classe singola, o 1 gruppo parallelo autorizzato) può usare lo spazio nello slot
                         m.Add(sum(active_entities) <= 1)
 
         # 9. VINCOLO DIDATTICO RIGIDO: Max ore al giorno per materia in una classe
@@ -1115,26 +1117,31 @@ class TimetableSolver:
                                 assigned_r_id = r_id
                                 assigned_r_name = prob.rooms[r_id].name
                                 break
-                    # Se non libera tra le compatibili dirette per tutto il blocco, cerca tra altre aule libere compatibili
+                    # Se non libera tra le compatibili dirette per tutto il blocco, cerca tra altre aule compatibili che non siano riservate ad altri docenti
                     if assigned_r_id is None:
                         # 1. Prova ora per ora tra le compatibili
                         for r_id in sorted_comp:
                             if r_id in prob.rooms:
-                                r_cap = prob.rooms[r_id].capacity
+                                r_obj = prob.rooms[r_id]
+                                if getattr(r_obj, "teacher_ids", []) and a.teacher_id not in r_obj.teacher_ids:
+                                    continue
+                                r_cap = r_obj.capacity
                                 if all(len(room_occupancy.get((r_id, d, h), [])) < r_cap for h in h_list):
                                     assigned_r_id = r_id
-                                    assigned_r_name = prob.rooms[r_id].name
+                                    assigned_r_name = r_obj.name
                                     break
-                    if assigned_r_id is None:
-                        # 2. Cerca tra tutte le aule della scuola una stanza libera per evitare doppie allocazioni fittizie
+                    if assigned_r_id is None and not prob.config.is_dada:
+                        # 2. Solo in modalità tradizionale cerca tra aule ordinarie libere
                         for r_id, r_obj in prob.rooms.items():
                             if not r_obj.is_special_lab:
+                                if getattr(r_obj, "teacher_ids", []) and a.teacher_id not in r_obj.teacher_ids:
+                                    continue
                                 if all(len(room_occupancy.get((r_id, d, h), [])) < r_obj.capacity for h in h_list):
                                     assigned_r_id = r_id
                                     assigned_r_name = r_obj.name
                                     break
                     if assigned_r_id is None:
-                        # 3. Fallback finale prioritario
+                        # 3. Fallback solo sulle compatibili dirette
                         for r_id in sorted_comp:
                             if r_id in prob.rooms:
                                 assigned_r_id = r_id
@@ -1219,23 +1226,8 @@ class TimetableSolver:
                                     else:
                                         comp_desc_parts.append(f"Classi Aperte con {', '.join(other_c_names)}")
                                     
-                    # 3. Stessa Aula / Palestra condivisa con altre classi nello stesso momento (SOLO se capienza > 1)
-                    if r_id and r_id in prob.rooms:
-                        room_obj = prob.rooms[r_id]
-                        if room_obj.capacity > 1:
-                            same_room_other = [
-                                (oa, occ_r, os_info) for (oa, occ_r, os_info) in slot_info_list
-                                if occ_r == r_id and oa.id != a_item.id and (oa.class_id not in s_info.parallel_classes)
-                            ]
-                            if same_room_other:
-                                s_info.is_compresenza = True
-                                other_c_names = [os_info.class_name for (_, _, os_info) in same_room_other]
-                                other_t_names = [os_info.teacher_name for (_, _, os_info) in same_room_other if os_info.teacher_id != s_info.teacher_id]
-                                if other_t_names:
-                                    comp_desc_parts.append(f"Spazio {s_info.room_name} con {', '.join(other_c_names)} ({', '.join(other_t_names)})")
-                                else:
-                                    comp_desc_parts.append(f"Spazio {s_info.room_name} con {', '.join(other_c_names)}")
-                                
+                    # 3. Stessa Aula / Palestra condivisa: attiva SOLO se le classi fanno parte dello stesso gruppo di parallelismo o se esplicitamente configurato
+                    # (Non generare mai compresenze d'aula arbitrarie)
                     if comp_desc_parts:
                         s_info.compresenza_text = " | ".join(comp_desc_parts)
 
