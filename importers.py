@@ -289,6 +289,144 @@ def _parse_free_days(text: Any) -> List[str]:
                     found.append(formal_name)
     return found
 
+SUBJECT_CANONICAL_MAP = {
+    "ita": ["ita", "italiano", "lettere", "lingua italiana", "grammatica", "antologia", "letteratura", "letteratura italiana"],
+    "sto": ["sto", "storia", "storia e geografia"],
+    "geo": ["geo", "geografia"],
+    "mat": ["mat", "matematica", "mate", "algebra", "geometria", "aritmetica"],
+    "sci": ["sci", "scienze", "scienze naturali", "biologia", "chimica", "scienze della terra", "fisica", "scienze e tecnologia"],
+    "ing": ["ing", "inglese", "lingua inglese", "english", "lingua e civilta inglese"],
+    "spa": ["spa", "spagnolo", "seconda lingua (spagnolo)", "lingua spagnola", "spanish", "francese", "tedesco", "seconda lingua", "lingua comunitaria", "2 lingua", "2^ lingua", "seconda_lingua", "lingua 2", "seconda lingua comunitaria"],
+    "tec": ["tec", "tecnologia", "tecnica", "applicazioni tecniche", "informatica", "coding", "robotica"],
+    "mus": ["mus", "musica", "educazione musicale", "teoria e solfeggio", "strumento", "strumento musicale", "pianoforte", "chitarra", "flauto", "violino", "tromba", "clarinetto", "percussioni"],
+    "art": ["art", "arte", "arte e immagine", "disegno", "storia dell'arte", "educazione artistica", "arte immagine"],
+    "mot": ["mot", "motoria", "scienze motorie", "scienze motorie e sportive", "ed. fisica", "educazione fisica", "ginnastica", "sport", "palestra", "attivita motorie", "ed fisica"],
+    "rel": ["rel", "religione", "religione cattolica", "irc", "materia alternativa", "attivita alternativa", "alternativa alla religione", "alternativa irc"],
+    "tea": ["tea", "teatro", "laboratorio di teatro", "laboratorio teatro", "drammatizzazione"],
+    "orch": ["orch", "orchestra", "musica d'insieme", "musica d'insieme (orchestra)"],
+    "solf": ["solf", "solfeggio", "teoria e solfeggio", "lettura musicale"],
+    "lab_prol": ["lab_prol", "laboratorio prolungato", "laboratorio / compresenza prolungato"]
+}
+
+def _resolve_subject_ids(raw_str: str, existing_subjects: Dict[str, Subject]) -> List[str]:
+    """
+    Risolve in modo intelligente una stringa di materie (es. 'Italiano, Storia', 'ita, sto', 'Scienze Motorie', 'Arte e Immagine')
+    negli ID canonici presenti in existing_subjects o mappati tramite SUBJECT_CANONICAL_MAP.
+    """
+    if not raw_str or pd.isna(raw_str) or not str(raw_str).strip():
+        return []
+    
+    raw_s = str(raw_str).strip()
+    if raw_s.lower() in ["nan", "none", "null", ""]:
+        return []
+
+    # Se c'è una combinazione di virgole / punti e virgola / slash
+    tokens = [x.strip() for x in re.split(r'[,;/|]+', raw_s) if x.strip()]
+    resolved_ids: List[str] = []
+
+    def match_single_token(tok: str) -> Optional[str]:
+        t_clean = tok.strip().lower()
+        if not t_clean:
+            return None
+
+        # 1. Corrispondenza esatta con ID o nome in existing_subjects
+        if t_clean in existing_subjects:
+            return t_clean
+        for s_id, s_obj in existing_subjects.items():
+            if s_id.lower() == t_clean or s_obj.name.strip().lower() == t_clean:
+                return s_id
+
+        # 2. Corrispondenza con alias canonici
+        for canon_id, aliases in SUBJECT_CANONICAL_MAP.items():
+            if t_clean == canon_id or t_clean in aliases:
+                # Controlla se il canon_id esiste in existing_subjects
+                if canon_id in existing_subjects:
+                    return canon_id
+                # O cerca se una materia in existing_subjects ha un alias equivalente
+                for s_id, s_obj in existing_subjects.items():
+                    s_name_clean = s_obj.name.strip().lower()
+                    if s_id in aliases or s_name_clean in aliases:
+                        return s_id
+                # Altrimenti se non ancora creata restituisci canon_id o l'ID pulito
+                return canon_id
+
+        # 3. Corrispondenza parziale / inclusione in existing_subjects
+        for s_id, s_obj in existing_subjects.items():
+            s_name_clean = s_obj.name.strip().lower()
+            if t_clean in s_name_clean or s_name_clean in t_clean:
+                return s_id
+
+        # 4. Fallback pulito
+        return _clean_id(t_clean)
+
+    for tok in tokens:
+        m_id = match_single_token(tok)
+        if m_id and m_id not in resolved_ids:
+            resolved_ids.append(m_id)
+
+    return resolved_ids
+
+def _resolve_teacher_ids(raw_str: str, existing_teachers: Dict[str, Teacher]) -> List[str]:
+    """
+    Risolve una stringa di docenti (es. 'Prof. Valenti S., Prof.ssa Montanari G.')
+    negli ID dei docenti in existing_teachers.
+    """
+    if not raw_str or pd.isna(raw_str) or not str(raw_str).strip():
+        return []
+    
+    raw_s = str(raw_str).strip()
+    if raw_s.lower() in ["nan", "none", "null", ""]:
+        return []
+
+    tokens = [x.strip() for x in re.split(r'[,;/|]+', raw_s) if x.strip()]
+    resolved_tids: List[str] = []
+
+    def clean_name_for_match(name: str) -> str:
+        # Rimuove prefissi come Prof., Prof.ssa, Doc., Dott., ecc. e parentesi
+        n = re.sub(r'\(.*?\)', '', name)
+        n = re.sub(r'\b(prof\.?ssa|prof\.?|doc\.?|dott\.?ssa|dott\.?|maestro|maestra)\b', '', n, flags=re.IGNORECASE)
+        n = re.sub(r'[^a-zA-Z0-9]', '', n).lower()
+        return n
+
+    for tok in tokens:
+        t_clean = tok.strip()
+        if not t_clean:
+            continue
+        
+        matched_tid = None
+        # Match esatto ID o nome
+        for cand_tid, cand_t in existing_teachers.items():
+            if cand_t.name.strip().lower() == t_clean.lower() or cand_tid.lower() == t_clean.lower():
+                matched_tid = cand_tid
+                break
+        
+        # Match normalizzato senza prefissi
+        if not matched_tid:
+            tok_norm = clean_name_for_match(t_clean)
+            if tok_norm:
+                for cand_tid, cand_t in existing_teachers.items():
+                    if clean_name_for_match(cand_t.name) == tok_norm or clean_name_for_match(cand_tid) == tok_norm:
+                        matched_tid = cand_tid
+                        break
+        
+        # Match per cognome / inclusione
+        if not matched_tid:
+            tok_lower = t_clean.lower()
+            for cand_tid, cand_t in existing_teachers.items():
+                if tok_lower in cand_t.name.lower() or cand_t.name.lower() in tok_lower:
+                    matched_tid = cand_tid
+                    break
+
+        if matched_tid:
+            if matched_tid not in resolved_tids:
+                resolved_tids.append(matched_tid)
+        else:
+            fallback_id = "doc_" + _clean_id(t_clean)
+            if fallback_id not in resolved_tids:
+                resolved_tids.append(fallback_id)
+
+    return resolved_tids
+
 def parse_timetable_dataframe(df: pd.DataFrame, base_config: Optional[SchoolConfig] = None) -> Tuple[TimetableProblem, List[str]]:
     """
     Parser unificato e flessibile per DataFrame pandas (da CSV o Excel).
@@ -1384,6 +1522,7 @@ def parse_unified_school_excel(file_bytes: Any, base_config: Optional[SchoolConf
             break
 
     # 4. Parsing Aule & Ambienti DADA
+    raw_room_data = []
     for s in sheet_names:
         if "aule" in s.lower() or "4_" in s:
             df_r = xl.parse(s)
@@ -1393,38 +1532,20 @@ def parse_unified_school_excel(file_bytes: Any, base_config: Optional[SchoolConf
                     continue
                 r_id = "room_" + _clean_id(r_name)
                 subs_raw = str(r.get("Materie_Assegnate", "")).strip()
-                sub_ids = [x.strip().lower() for x in subs_raw.split(",") if x.strip() and subs_raw.lower() != "nan"]
                 r_cap = _parse_int(r.get("Capienza_Classi", r.get("Capienza_Aula", 1)), default=1)
                 r_prio = _parse_int(r.get("Priorita", 1), default=1)
                 r_spec = _parse_bool(r.get("Laboratorio_Speciale", False))
                 docs_raw = str(r.get("Docenti_Assegnati", r.get("Docenti", ""))).strip()
-                t_ids = []
-                if docs_raw and docs_raw.lower() != "nan":
-                    for d_entry in docs_raw.split(","):
-                        d_clean = d_entry.strip()
-                        if not d_clean:
-                            continue
-                        matched_tid = None
-                        for cand_tid, cand_t in teachers.items():
-                            if cand_t.name.lower() == d_clean.lower() or cand_tid.lower() == d_clean.lower():
-                                matched_tid = cand_tid
-                                break
-                        if matched_tid:
-                            t_ids.append(matched_tid)
-                        else:
-                            # id pulito
-                            t_ids.append("doc_" + _clean_id(d_clean))
 
-                classrooms[r_id] = Classroom(
-                    id=r_id,
-                    name=r_name,
-                    subject_ids=sub_ids,
-                    capacity=r_cap,
-                    priority=r_prio,
-                    is_special_lab=r_spec,
-                    teacher_ids=t_ids
-                )
-            logs.append(f"🏛️ Caricati **{len(classrooms)} ambienti e aule DADA**.")
+                raw_room_data.append({
+                    "id": r_id,
+                    "name": r_name,
+                    "subs_raw": subs_raw,
+                    "docs_raw": docs_raw,
+                    "capacity": r_cap,
+                    "priority": r_prio,
+                    "is_special_lab": r_spec
+                })
             break
 
     # 5. Parsing Cattedre Curricolari
@@ -1609,6 +1730,23 @@ def parse_unified_school_excel(file_bytes: Any, base_config: Optional[SchoolConf
             if parallel_groups:
                 logs.append(f"🔀 Caricati **{len(parallel_groups)} gruppi a classi aperte / parallelismi**.")
             break
+
+    # 8. Risoluzione Intelligente e Riconciliazione Aule DADA con Materie e Docenti
+    if raw_room_data:
+        for r_info in raw_room_data:
+            resolved_sub_ids = _resolve_subject_ids(r_info["subs_raw"], subjects)
+            resolved_teacher_ids = _resolve_teacher_ids(r_info["docs_raw"], teachers)
+
+            classrooms[r_info["id"]] = Classroom(
+                id=r_info["id"],
+                name=r_info["name"],
+                subject_ids=resolved_sub_ids,
+                capacity=r_info["capacity"],
+                priority=r_info["priority"],
+                is_special_lab=r_info["is_special_lab"],
+                teacher_ids=resolved_teacher_ids
+            )
+        logs.append(f"🏛️ Caricati e riconciliati **{len(classrooms)} ambienti e aule DADA** (con associazione materie e docenti).")
 
     config.parallel_groups = parallel_groups
     prob = TimetableProblem(
