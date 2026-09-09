@@ -738,7 +738,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=True,
                 priority=1,
-                teacher_ids=[t for t in ["doc_tec_1", "doc_mat_1", "doc_mat_6"] if t in teachers]
+                teacher_ids=[t for t in ["doc_tec_1", "doc_mat_1"] if t in teachers]
             ),
             "archimede": Classroom(
                 id="archimede",
@@ -765,7 +765,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=True,
                 priority=1,
-                teacher_ids=[t for t in ["doc_mot_1", "doc_mot_2", "doc_mot_3"] if t in teachers]
+                teacher_ids=[t for t in ["doc_mot_1"] if t in teachers]
             ),
             "palestra_murato": Classroom(
                 id="palestra_murato",
@@ -773,8 +773,8 @@ def get_sample_problem(
                 subject_ids=["mot"],
                 capacity=1,
                 is_special_lab=True,
-                priority=2,
-                teacher_ids=[t for t in ["doc_mot_4", "doc_mot_1"] if t in teachers]
+                priority=1,
+                teacher_ids=[t for t in ["doc_mot_2", "doc_mot_3", "doc_mot_4"] if t in teachers]
             ),
             "galileo": Classroom(
                 id="galileo",
@@ -792,7 +792,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=False,
                 priority=1,
-                teacher_ids=[t for t in ["doc_rel_1"] if t in teachers]
+                teacher_ids=[t for t in ["doc_rel_1", "doc_rel_2"] if t in teachers]
             ),
             "bach": Classroom(
                 id="bach",
@@ -819,7 +819,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=False,
                 priority=1,
-                teacher_ids=[t for t in ["doc_mat_1", "doc_mat_2", "doc_mat_3"] if t in teachers]
+                teacher_ids=[t for t in ["doc_mat_1", "doc_mat_2"] if t in teachers]
             ),
             "pitagora": Classroom(
                 id="pitagora",
@@ -828,7 +828,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=False,
                 priority=1,
-                teacher_ids=[t for t in ["doc_mat_4", "doc_mat_5"] if t in teachers]
+                teacher_ids=[t for t in ["doc_mat_3", "doc_mat_4"] if t in teachers]
             ),
             "eulero": Classroom(
                 id="eulero",
@@ -837,7 +837,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=False,
                 priority=1,
-                teacher_ids=[t for t in ["doc_mat_6", "doc_mat_7", "doc_mat_3"] if t in teachers]
+                teacher_ids=[t for t in ["doc_mat_5", "doc_mat_6", "doc_mat_7"] if t in teachers]
             ),
             "chichibio": Classroom(
                 id="chichibio",
@@ -855,7 +855,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=False,
                 priority=1,
-                teacher_ids=[t for t in ["doc_let_3", "doc_let_4", "doc_let_5"] if t in teachers]
+                teacher_ids=[t for t in ["doc_let_3", "doc_let_4"] if t in teachers]
             ),
             "pinocchio": Classroom(
                 id="pinocchio",
@@ -864,7 +864,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=False,
                 priority=1,
-                teacher_ids=[t for t in ["doc_let_6", "doc_let_7"] if t in teachers]
+                teacher_ids=[t for t in ["doc_let_5", "doc_let_6"] if t in teachers]
             ),
             "didone": Classroom(
                 id="didone",
@@ -873,7 +873,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=False,
                 priority=1,
-                teacher_ids=[t for t in ["doc_let_8", "doc_let_9"] if t in teachers]
+                teacher_ids=[t for t in ["doc_let_7", "doc_let_8"] if t in teachers]
             ),
             "queen": Classroom(
                 id="queen",
@@ -882,7 +882,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=False,
                 priority=1,
-                teacher_ids=[t for t in ["doc_ing_1", "doc_ing_2"] if t in teachers]
+                teacher_ids=[t for t in ["doc_ing_1"] if t in teachers]
             ),
             "strawberry": Classroom(
                 id="strawberry",
@@ -891,7 +891,16 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=False,
                 priority=1,
-                teacher_ids=[t for t in ["doc_ing_2", "doc_ing_3"] if t in teachers]
+                teacher_ids=[t for t in ["doc_ing_2"] if t in teachers]
+            ),
+            "beatles": Classroom(
+                id="beatles",
+                name="BEATLES",
+                subject_ids=["ing"],
+                capacity=1,
+                is_special_lab=False,
+                priority=1,
+                teacher_ids=[t for t in ["doc_ing_3"] if t in teachers]
             ),
             "gagarin": Classroom(
                 id="gagarin",
@@ -909,7 +918,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=False,
                 priority=1,
-                teacher_ids=[t for t in ["doc_let_5", "doc_let_3", "doc_let_8"] if t in teachers]
+                teacher_ids=[t for t in ["doc_let_5", "doc_let_3", "doc_let_8", "doc_let_11"] if t in teachers]
             ),
             "verne": Classroom(
                 id="verne",
@@ -936,7 +945,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=True,
                 priority=1,
-                teacher_ids=[t for t in ["doc_art_1", "doc_art_2"] if t in teachers]
+                teacher_ids=[t for t in ["doc_art_1"] if t in teachers]
             ),
             "miro": Classroom(
                 id="miro",
@@ -945,7 +954,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=True,
                 priority=1,
-                teacher_ids=[t for t in ["doc_art_3", "doc_art_2"] if t in teachers]
+                teacher_ids=[t for t in ["doc_art_2", "doc_art_3"] if t in teachers]
             ),
             "r2_d2": Classroom(
                 id="r2_d2",
@@ -963,7 +972,7 @@ def get_sample_problem(
                 capacity=1,
                 is_special_lab=True,
                 priority=2,
-                teacher_ids=[t for t in ["doc_let_4", "doc_let_10", "doc_let_7", "doc_let_1", "doc_let_8", "doc_let_6", "doc_let_11", "doc_let_3", "doc_let_2"] if t in teachers]
+                teacher_ids=[t for t in ["doc_let_9"] if t in teachers]
             ),
         }
     else:
@@ -1211,7 +1220,7 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=True,
             priority=1,
-            teacher_ids=[t for t in ["doc_tec_1", "doc_mat_1", "doc_mat_6"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_tec_1", "doc_mat_1"] if not t_map or t in t_map]
         ),
         "archimede": Classroom(
             id="archimede",
@@ -1238,7 +1247,7 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=True,
             priority=1,
-            teacher_ids=[t for t in ["doc_mot_1", "doc_mot_2", "doc_mot_3"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_mot_1"] if not t_map or t in t_map]
         ),
         "palestra_murato": Classroom(
             id="palestra_murato",
@@ -1246,8 +1255,8 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             subject_ids=["mot"],
             capacity=1,
             is_special_lab=True,
-            priority=2,
-            teacher_ids=[t for t in ["doc_mot_4", "doc_mot_1"] if not t_map or t in t_map]
+            priority=1,
+            teacher_ids=[t for t in ["doc_mot_2", "doc_mot_3", "doc_mot_4"] if not t_map or t in t_map]
         ),
         "galileo": Classroom(
             id="galileo",
@@ -1265,7 +1274,7 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=False,
             priority=1,
-            teacher_ids=[t for t in ["doc_rel_1"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_rel_1", "doc_rel_2"] if not t_map or t in t_map]
         ),
         "bach": Classroom(
             id="bach",
@@ -1292,7 +1301,7 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=False,
             priority=1,
-            teacher_ids=[t for t in ["doc_mat_1", "doc_mat_2", "doc_mat_3"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_mat_1", "doc_mat_2"] if not t_map or t in t_map]
         ),
         "pitagora": Classroom(
             id="pitagora",
@@ -1301,7 +1310,7 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=False,
             priority=1,
-            teacher_ids=[t for t in ["doc_mat_4", "doc_mat_5"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_mat_3", "doc_mat_4"] if not t_map or t in t_map]
         ),
         "eulero": Classroom(
             id="eulero",
@@ -1310,7 +1319,7 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=False,
             priority=1,
-            teacher_ids=[t for t in ["doc_mat_6", "doc_mat_7", "doc_mat_3"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_mat_5", "doc_mat_6", "doc_mat_7"] if not t_map or t in t_map]
         ),
         "chichibio": Classroom(
             id="chichibio",
@@ -1328,7 +1337,7 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=False,
             priority=1,
-            teacher_ids=[t for t in ["doc_let_3", "doc_let_4", "doc_let_5"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_let_3", "doc_let_4"] if not t_map or t in t_map]
         ),
         "pinocchio": Classroom(
             id="pinocchio",
@@ -1337,7 +1346,7 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=False,
             priority=1,
-            teacher_ids=[t for t in ["doc_let_6", "doc_let_7"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_let_5", "doc_let_6"] if not t_map or t in t_map]
         ),
         "didone": Classroom(
             id="didone",
@@ -1346,7 +1355,7 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=False,
             priority=1,
-            teacher_ids=[t for t in ["doc_let_8", "doc_let_9"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_let_7", "doc_let_8"] if not t_map or t in t_map]
         ),
         "queen": Classroom(
             id="queen",
@@ -1355,7 +1364,7 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=False,
             priority=1,
-            teacher_ids=[t for t in ["doc_ing_1", "doc_ing_2"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_ing_1"] if not t_map or t in t_map]
         ),
         "strawberry": Classroom(
             id="strawberry",
@@ -1364,7 +1373,16 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=False,
             priority=1,
-            teacher_ids=[t for t in ["doc_ing_2", "doc_ing_3"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_ing_2"] if not t_map or t in t_map]
+        ),
+        "beatles": Classroom(
+            id="beatles",
+            name="BEATLES",
+            subject_ids=["ing"],
+            capacity=1,
+            is_special_lab=False,
+            priority=1,
+            teacher_ids=[t for t in ["doc_ing_3"] if not t_map or t in t_map]
         ),
         "gagarin": Classroom(
             id="gagarin",
@@ -1409,7 +1427,7 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=True,
             priority=1,
-            teacher_ids=[t for t in ["doc_art_1", "doc_art_2"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_art_1"] if not t_map or t in t_map]
         ),
         "miro": Classroom(
             id="miro",
@@ -1418,7 +1436,7 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=True,
             priority=1,
-            teacher_ids=[t for t in ["doc_art_3", "doc_art_2"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_art_2", "doc_art_3"] if not t_map or t in t_map]
         ),
         "r2_d2": Classroom(
             id="r2_d2",
@@ -1436,6 +1454,6 @@ def get_official_dada_rooms(teachers: Optional[Dict[str, Teacher]] = None) -> Di
             capacity=1,
             is_special_lab=True,
             priority=2,
-            teacher_ids=[t for t in ["doc_let_4", "doc_let_10", "doc_let_7", "doc_let_1", "doc_let_8", "doc_let_6", "doc_let_11", "doc_let_3", "doc_let_2"] if not t_map or t in t_map]
+            teacher_ids=[t for t in ["doc_let_9", "doc_let_4", "doc_let_10", "doc_let_7", "doc_let_1", "doc_let_8", "doc_let_6", "doc_let_11", "doc_let_3", "doc_let_2"] if not t_map or t in t_map]
         ),
     }

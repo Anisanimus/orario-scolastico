@@ -452,12 +452,24 @@ class TimetableSolver:
         self.all_pair_vars = []
         is_dada_strict_pairs = bool(getattr(prob.config, "is_dada", False) and getattr(prob.config, "dada_strict_even_pairs", False))
 
-        # 1. Creazione variabili principali X[assignment, d, h]
+        # 1. Creazione variabili principali X[assignment, d, h] e Y_ROOM[assignment, room_id, d, h]
         for a in prob.assignments:
+            comp_rooms = self.assignment_compatible_rooms.get(a.id, [])
             for d in range(num_days):
                 for h in range(daily_hours[d]):
                     var_name = f"x_{a.id}_d{d}_h{h}"
                     self.x[a.id, d, h] = m.NewBoolVar(var_name)
+                    
+                    if len(comp_rooms) == 1:
+                        self.y_room[a.id, comp_rooms[0], d, h] = self.x[a.id, d, h]
+                    elif len(comp_rooms) > 1:
+                        y_vars = []
+                        for r_id in comp_rooms:
+                            y_var = m.NewBoolVar(f"y_room_{a.id}_{r_id}_d{d}_h{h}")
+                            self.y_room[a.id, r_id, d, h] = y_var
+                            y_vars.append(y_var)
+                        # Se l'assegnazione è attiva all'ora (d,h), deve occupare esattamente un'aula compatibile
+                        m.Add(sum(y_vars) == self.x[a.id, d, h])
 
         # 2. VINCOLO RIGIDO: Monte ore settimanale esatto per ciascuna cattedra
         for a in prob.assignments:
@@ -610,7 +622,7 @@ class TimetableSolver:
                     m.Add(day_act <= sum(daily_active_terms))
 
                     # Regola 3: Fino a 4 ore di fila (mai 5 ore consecutive continue)
-                    if max_consec < H:
+                    if not skip_penalties and max_consec < H:
                         w_size = max_consec + 1
                         for h in range(H - max_consec):
                             m.Add(sum(daily_active_terms[h + k] for k in range(w_size)) <= max_consec)
@@ -645,77 +657,59 @@ class TimetableSolver:
                     if d < num_days and h < daily_hours[d]:
                         m.Add(self.x[a.id, d, h] == 1)
 
-        # 8. VINCOLO RIGIDO: Capienza Massima Aule & Laboratori (DADA, Palestre, Teatri, Lab Condivisi)
-        # Raggruppa le cattedre che condividono lo stesso gruppo di aule compatibili
-        room_group_map: Dict[Tuple[str, ...], List[str]] = {}
-        for a in prob.assignments:
-            comp = tuple(sorted(self.assignment_compatible_rooms.get(a.id, [])))
-            if comp:
-                room_group_map.setdefault(comp, []).append(a.id)
-
-        for comp_rooms_tuple, assign_ids in room_group_map.items():
-            rooms_in_grp = [prob.rooms[r_id] for r_id in comp_rooms_tuple if r_id in prob.rooms]
-            if not rooms_in_grp:
+        # 8. VINCOLO RIGIDO: Capienza Massima Singole Aule & Laboratori (DADA, Palestre, Teatri, Lab Condivisi)
+        # Per ciascuna stanza fisica r_id, la somma delle cattedre che la occupano all'ora (d, h) non può superare r.capacity
+        for r_id, r_obj in prob.rooms.items():
+            r_cap = r_obj.capacity
+            # Cattedre che possono usare r_id
+            assign_ids_with_room = [a.id for a in prob.assignments if (a.id, r_id, 0, 0) in self.y_room]
+            if not assign_ids_with_room:
                 continue
-            total_cap = sum(r.capacity for r in rooms_in_grp)
-            
-            # Identifica eventuali gruppi di parallelismo associati a questo spazio
+
+            # Identifica eventuali gruppi di parallelismo associati a questa specifica stanza
             pg_in_room = []
             assigns_in_room_pg = set()
             for grp in active_parallel_groups:
-                g_a_ids = [aid for aid in assign_ids if any(a.id == aid and a.class_id in grp.class_ids and a.subject_id == grp.subject_id for a in prob.assignments)]
+                g_a_ids = [aid for aid in assign_ids_with_room if any(a.id == aid and a.class_id in grp.class_ids and a.subject_id == grp.subject_id for a in prob.assignments)]
                 if len(g_a_ids) >= 2:
                     pg_in_room.append((grp, g_a_ids))
                     assigns_in_room_pg.update(g_a_ids)
 
-            stand_alone_room_assigns = [aid for aid in assign_ids if aid not in assigns_in_room_pg]
+            stand_alone_room_assigns = [aid for aid in assign_ids_with_room if aid not in assigns_in_room_pg]
 
             for d in range(num_days):
                 for h in range(daily_hours[d]):
-                    # 1. Capienza numerica complessiva per il pool di aule
-                    slot_terms = [self.x[a_id, d, h] for a_id in stand_alone_room_assigns]
+                    # 1. Capienza numerica per la singola stanza
+                    slot_terms = [self.y_room[a_id, r_id, d, h] for a_id in stand_alone_room_assigns if (a_id, r_id, d, h) in self.y_room]
                     for grp, g_a_ids in pg_in_room:
                         p_vars_dict = self.parallel_group_slot_vars.get(grp.id)
                         if p_vars_dict and (d, h) in p_vars_dict:
                             p_v = p_vars_dict[d, h]
-                            slot_terms.append(sum(self.x[aid, d, h] for aid in g_a_ids) - (len(g_a_ids) - 1) * p_v)
+                            slot_terms.append(sum(self.y_room[aid, r_id, d, h] for aid in g_a_ids if (aid, r_id, d, h) in self.y_room) - (len(g_a_ids) - 1) * p_v)
                         else:
-                            slot_terms.append(self.x[g_a_ids[0], d, h])
-                    m.Add(sum(slot_terms) <= total_cap)
+                            slot_terms.append(self.y_room[g_a_ids[0], r_id, d, h] if (g_a_ids[0], r_id, d, h) in self.y_room else 0)
+                    m.Add(sum(slot_terms) <= r_cap)
 
-                    # 2. VINCOLO RIGIDO ESCLUSIVITÀ CONDIVISIONE:
-                    # Se c'è una sola stanza condivisa (es. Unica Palestra) a capienza > 1 per parallelismi:
-                    # - Una classe standalone (non in parallelismo) NON può condividere lo spazio con nessun'altra classe.
-                    # - Due gruppi paralleli differenti NON possono stare contemporaneamente nello stesso spazio.
-                    if len(rooms_in_grp) == 1 and total_cap > 1:
+                    # 2. VINCOLO RIGIDO ESCLUSIVITÀ CONDIVISIONE PER STANZE CONDIVISE CON PARALLELISMI (es. Palestra):
+                    if r_cap > 1:
                         active_entities = []
                         for aid in stand_alone_room_assigns:
-                            active_entities.append(self.x[aid, d, h])
+                            if (aid, r_id, d, h) in self.y_room:
+                                active_entities.append(self.y_room[aid, r_id, d, h])
                         for grp, g_a_ids in pg_in_room:
                             p_vars_dict = self.parallel_group_slot_vars.get(grp.id)
                             if p_vars_dict and (d, h) in p_vars_dict:
                                 active_entities.append(p_vars_dict[d, h])
-                            else:
-                                active_entities.append(self.x[g_a_ids[0], d, h])
+                            elif (g_a_ids[0], r_id, d, h) in self.y_room:
+                                active_entities.append(self.y_room[g_a_ids[0], r_id, d, h])
                         m.Add(sum(active_entities) <= 1)
 
         # 9. VINCOLO DIDATTICO RIGIDO: Max ore al giorno per materia in una classe
         for a in prob.assignments:
-            f_dbl = a.force_double_hours or (hasattr(prob.config, "subject_block_preferences") and prob.config.subject_block_preferences.get(a.subject_id, False))
-            is_in_2h_parallel = any(
-                grp.is_active and a.class_id in grp.class_ids and a.subject_id == grp.subject_id and (grp.force_consecutive_block or grp.parallel_hours >= 2)
-                for grp in active_parallel_groups
-            )
-            if not f_dbl and not is_in_2h_parallel:
-                eff_max_h = min(getattr(a, "max_daily_hours", 2) or 2, 2)
-                for d in range(num_days):
-                    daily_slots = [self.x[a.id, d, h] for h in range(daily_hours[d])]
-                    m.Add(sum(daily_slots) <= eff_max_h)
-            else:
-                eff_max_h = 2 if a.hours_per_week <= 5 else 4
-                for d in range(num_days):
-                    daily_slots = [self.x[a.id, d, h] for h in range(daily_hours[d])]
-                    m.Add(sum(daily_slots) <= eff_max_h)
+            eff_max_h = 1 if a.hours_per_week == 1 else (2 if a.hours_per_week <= 5 else 4)
+            for d in range(num_days):
+                daily_slots = [self.x[a.id, d, h] for h in range(daily_hours[d])]
+                m.Add(sum(daily_slots) <= eff_max_h)
 
         # -------------------------------------------------------------
         # MODELLAZIONE SOFT CONSTRAINTS / DESIDERATA & FUNZIONE OBIETTIVO
@@ -861,52 +855,41 @@ class TimetableSolver:
                             if d_pairs:
                                 # Nel giorno ci può essere al massimo 1 blocco da 2h per questa materia
                                 day_has_pair = m.NewBoolVar(f"d_pair_{a.id}_{d}")
-                                for pv in d_pairs:
-                                    m.Add(day_has_pair >= pv)
-                                m.Add(day_has_pair <= sum(d_pairs))
+                                m.Add(day_has_pair == sum(d_pairs))
                                 day_pairs.append(day_has_pair)
                                 
-                                # Se il monte ore è <= 5, in quel giorno o ci sono 2 ore consecutive o 0/1 ora singola
-                                if a.hours_per_week <= 5:
+                                is_even_days = all(daily_hours[d_idx] % 2 == 0 for d_idx in range(num_days))
+                                if a.hours_per_week == 2 or (is_even_days and a.hours_per_week in [4, 6]):
+                                    # Se una materia da 2h (o 4h/6h su settimana a ore pari) è forzata a blocchi, in quel giorno o ha 2h (blocco) o 0h
+                                    m.Add(sum(self.x[a.id, d, h] for h in range(H)) == 2 * day_has_pair)
+                                elif a.hours_per_week <= 5:
                                     m.Add(sum(self.x[a.id, d, h] for h in range(H)) <= 2)
                                 else:
                                     m.Add(sum(self.x[a.id, d, h] for h in range(H)) <= 4)
 
                     if day_pairs:
+                        target_pairs = a.hours_per_week // 2
+                        is_even_days = all(daily_hours[d_idx] % 2 == 0 for d_idx in range(num_days))
                         if in_1h_parallel:
                             min_pairs = (a.hours_per_week - 1) // 2
                             m.Add(sum(day_pairs) >= min_pairs)
-                            m.Add(sum(day_pairs) <= a.hours_per_week // 2)
-                        elif a.hours_per_week == 2:
-                            # Materie da 2h settimanali (es. Arte, Musica, Tec, Mot): esattamente 1 blocco da 2h
-                            m.Add(sum(day_pairs) == 1)
+                            m.Add(sum(day_pairs) <= target_pairs)
+                        elif a.hours_per_week == 2 or (is_even_days and a.hours_per_week in [4, 6]):
+                            m.Add(sum(day_pairs) == target_pairs)
                         else:
-                            # Materie da 3h, 4h, 5h, 6h settimanali: almeno 1 blocco da 2h garantito, fino al massimo teorico
-                            target_pairs = a.hours_per_week // 2
                             m.Add(sum(day_pairs) >= 1)
                             m.Add(sum(day_pairs) <= target_pairs)
 
         # E-bis. MINIMIZZAZIONE USO SPAZI SECONDARI / EMERGENZA (Priorità Aule & Palestre)
-        # Se un gruppo di aule contiene spazi a priorità differenziata (es. Palestra Principale Priorità 1 vs Emergenza Priorità 2),
-        # penalizza l'uso di spazi secondari quando il numero di classi contemporanee eccede la capienza degli spazi di priorità superiore.
+        # Se una stanza ha priorità > 1 (es. Palestra Secondaria Priorità 2), penalizza il suo utilizzo quando possibile
         if not skip_penalties:
-            for comp_rooms_tuple, assign_ids in room_group_map.items():
-                rooms_in_group = [prob.rooms[r_id] for r_id in comp_rooms_tuple if r_id in prob.rooms]
-                prio1_cap = sum(r.capacity for r in rooms_in_group if getattr(r, "priority", 1) == 1)
-                total_cap = sum(r.capacity for r in rooms_in_group)
-                
-                if 0 < prio1_cap < total_cap:
-                    total_h_in_group = sum(prob.assignments_by_id[a_id].hours_per_week for a_id in assign_ids if hasattr(prob, "assignments_by_id") and a_id in prob.assignments_by_id) if hasattr(prob, "assignments_by_id") else sum(a.hours_per_week for a in prob.assignments if a.id in assign_ids)
-                    total_slots = sum(daily_hours[:num_days])
-                    
-                    group_overflow_vars = []
-                    for d in range(num_days):
-                        for h in range(daily_hours[d]):
-                            active_in_slot = [self.x[a_id, d, h] for a_id in assign_ids]
-                            overflow_var = m.NewIntVar(0, total_cap - prio1_cap, f"overflow_prio_{abs(hash(comp_rooms_tuple))}_d{d}_h{h}")
-                            m.Add(sum(active_in_slot) - prio1_cap <= overflow_var)
-                            group_overflow_vars.append(overflow_var)
-                            penalties.append(overflow_var * 1500)
+            for r_id, r_obj in prob.rooms.items():
+                r_prio = getattr(r_obj, "priority", 1)
+                if r_prio > 1:
+                    prio_weight = 1500 * (r_prio - 1)
+                    for (a_id, room_id, d, h), y_var in self.y_room.items():
+                        if room_id == r_id:
+                            penalties.append(y_var * prio_weight)
 
         # F. FORMULAZIONE DELLE ORE BUCHE & EQUITÀ MIN-MAX (Compressione Massima Buche)
         if not skip_penalties:
@@ -951,10 +934,6 @@ class TimetableSolver:
             # Minimizza la somma di tutte le penalità
             if penalties:
                 m.Minimize(sum(penalties))
-
-        # Strategia di ramificazione intelligente per concentrare la ricerca sui blocchi da 2h
-        if self.all_pair_vars:
-            m.AddDecisionStrategy(self.all_pair_vars, cp_model.CHOOSE_FIRST, cp_model.SELECT_MAX_VALUE)
 
     def solve(self, max_time_seconds: int = 45, random_seed: int = 42) -> TimetableResult:
         start_time = time.time()
@@ -1063,96 +1042,31 @@ class TimetableSolver:
         for r_id in prob.rooms:
             res.grid_by_room[r_id] = [[None for _ in range(daily_hours[d])] for d in range(num_days)]
 
-        # Assegnazione atomica e coerente delle aule per BLOCCHI CONTINUI di lezione
-        # In ogni giorno, per ciascuna cattedra attiva, si individua il blocco consecutivo di ore [h_start..h_end].
-        # L'aula viene scelta in modo da essere LIBERA per l'INTERA DURATA DEL BLOCCO e assegnata stabilmente per tutte le ore.
+        # Assegnazione atomica e coerente delle aule: lettura diretta dalle variabili di decisione y_room del CP-SAT
         room_occupancy: Dict[Tuple[str, int, int], List[str]] = {}
         assigned_room_by_slot: Dict[Tuple[str, int, int], Tuple[Optional[str], Optional[str]]] = {}
 
         for d in range(num_days):
-            # Identifica tutti i blocchi contigui di lezione nel giorno d
-            day_blocks = []
             for a in prob.assignments:
                 active_h = [h for h in range(daily_hours[d]) if active_solver.Value(self.x[a.id, d, h]) == 1]
                 if not active_h:
                     continue
-                # Raggruppa in segmenti contigui
-                curr_block = [active_h[0]]
-                for h_next in active_h[1:]:
-                    if h_next == curr_block[-1] + 1:
-                        curr_block.append(h_next)
-                    else:
-                        day_blocks.append((a, list(curr_block)))
-                        curr_block = [h_next]
-                if curr_block:
-                    day_blocks.append((a, list(curr_block)))
-
-            # Ordina i blocchi del giorno: prima i blocchi più lunghi (2h/3h) e con vincoli aula più stringenti
-            def block_sort_key(item):
-                a_obj, h_list = item
-                comp = self.assignment_compatible_rooms.get(a_obj.id, [])
-                has_pref = 0 if a_obj.preferred_room_id else 1
-                return (has_pref, -len(h_list), len(comp), a_obj.id)
-
-            day_blocks.sort(key=block_sort_key)
-
-            # Assegna una sola aula stabile e costante per ciascun intero blocco
-            for a, h_list in day_blocks:
                 comp_rooms = self.assignment_compatible_rooms.get(a.id, [])
-                subj = prob.subjects.get(a.subject_id)
-                assigned_r_id = None
-                assigned_r_name = None
-
-                if comp_rooms:
-                    sorted_comp = sorted(comp_rooms, key=lambda r_id: getattr(prob.rooms.get(r_id), "priority", 1) if r_id in prob.rooms else 1)
-                    # Cerca un'aula che sia libera per TUTTE le ore del blocco
-                    for r_id in sorted_comp:
-                        if r_id in prob.rooms:
-                            r_cap = prob.rooms[r_id].capacity
-                            can_fit_all = all(
-                                len(room_occupancy.get((r_id, d, h), [])) < r_cap
-                                for h in h_list
-                            )
-                            if can_fit_all:
+                for h in active_h:
+                    assigned_r_id = None
+                    assigned_r_name = None
+                    if comp_rooms:
+                        # Leggi quale stanza è stata scelta dalla variabile di decisione CP-SAT y_room
+                        for r_id in comp_rooms:
+                            if (a.id, r_id, d, h) in self.y_room and active_solver.Value(self.y_room[a.id, r_id, d, h]) == 1:
                                 assigned_r_id = r_id
-                                assigned_r_name = prob.rooms[r_id].name
+                                assigned_r_name = prob.rooms[r_id].name if r_id in prob.rooms else r_id
                                 break
-                    # Se non libera tra le compatibili dirette per tutto il blocco, cerca tra altre aule compatibili che non siano riservate ad altri docenti
-                    if assigned_r_id is None:
-                        # 1. Prova ora per ora tra le compatibili
-                        for r_id in sorted_comp:
-                            if r_id in prob.rooms:
-                                r_obj = prob.rooms[r_id]
-                                if getattr(r_obj, "teacher_ids", []) and a.teacher_id not in r_obj.teacher_ids:
-                                    continue
-                                r_cap = r_obj.capacity
-                                if all(len(room_occupancy.get((r_id, d, h), [])) < r_cap for h in h_list):
-                                    assigned_r_id = r_id
-                                    assigned_r_name = r_obj.name
-                                    break
-                    if assigned_r_id is None and not prob.config.is_dada:
-                        # 2. Solo in modalità tradizionale cerca tra aule ordinarie libere
-                        for r_id, r_obj in prob.rooms.items():
-                            if not r_obj.is_special_lab:
-                                if getattr(r_obj, "teacher_ids", []) and a.teacher_id not in r_obj.teacher_ids:
-                                    continue
-                                if all(len(room_occupancy.get((r_id, d, h), [])) < r_obj.capacity for h in h_list):
-                                    assigned_r_id = r_id
-                                    assigned_r_name = r_obj.name
-                                    break
-                    if assigned_r_id is None:
-                        # 3. Fallback solo sulle compatibili dirette
-                        for r_id in sorted_comp:
-                            if r_id in prob.rooms:
-                                assigned_r_id = r_id
-                                assigned_r_name = prob.rooms[r_id].name
-                                break
-                elif subj and subj.special_room_id and subj.special_room_id in prob.rooms:
-                    assigned_r_id = subj.special_room_id
-                    assigned_r_name = prob.rooms[subj.special_room_id].name
+                    elif prob.subjects.get(a.subject_id) and prob.subjects[a.subject_id].special_room_id in prob.rooms:
+                        sp_id = prob.subjects[a.subject_id].special_room_id
+                        assigned_r_id = sp_id
+                        assigned_r_name = prob.rooms[sp_id].name
 
-                # Registra la stessa identica aula per TUTTE le ore del blocco
-                for h in h_list:
                     assigned_room_by_slot[a.id, d, h] = (assigned_r_id, assigned_r_name)
                     if assigned_r_id:
                         room_occupancy.setdefault((assigned_r_id, d, h), []).append(a.id)
